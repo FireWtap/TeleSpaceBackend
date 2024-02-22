@@ -20,7 +20,7 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(Users::Email).string().not_null())
+                    .col(ColumnDef::new(Users::Email).string().unique_key().not_null())
                     .col(ColumnDef::new(Users::PasswordHash).string().not_null())
                     .to_owned(),
             )

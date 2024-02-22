@@ -1,4 +1,4 @@
-workspace = { members = ["entity", ".", "migration"] }
+workspace = { members = ["entity", ".", "migration", "api"] }
 [package]
 name = "thesplitter"
 version = "0.1.0"
@@ -17,6 +17,7 @@ sea-orm = { version = "0.12", features = [
 ] }
 entity = { path = "entity" }
 migration = { path = "migration" }
+api = {path = "api"}
 tokio = { version = "1.0.0", features = ["rt", "rt-multi-thread", "macros"] }
 tracing-subscriber = "0.3.18"
 tracing = "0.1.40"

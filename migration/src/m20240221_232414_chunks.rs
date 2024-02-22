@@ -21,7 +21,7 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(Chunks::TelegramFileId).string().not_null())
+                    .col(ColumnDef::new(Chunks::TelegramFileId).string().unique_key().not_null())
                     .col(ColumnDef::new(Chunks::Order).integer().not_null())
                     .col(ColumnDef::new(Chunks::File).integer().not_null())
                     .foreign_key(

@@ -6,29 +6,29 @@ use migration::{Migrator, MigratorTrait};
 use entity::*;
 use entity::prelude::Users;
 
-#[tokio::main]
-async fn main() {
+
+fn main() {
     let path = env::current_dir().unwrap();
     println!("The current directory is {}", path.display());
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .with_test_writer()
         .init();
-
+    api::main();
     //let parts = rust_file_splitting_utils::file_splitter::split(String::from("nana.mkv"), 1024 * 1024 * 10, None);
 
     //rust_file_splitting_utils::file_merger::merge(String::from("nana.mkv"), String::from("output/"),parts);
 
-    let db = establish_connection().await.unwrap();
+    // db = establish_connection().await.unwrap();
     let user = users::ActiveModel{
         id: Default::default(),
         email: Set(String::from("Massafra32@gmail.com")),
         password_hash: Set(String::from("Pasqi")),
     };
-    let user = user.insert(&db).await.unwrap();
+    //let user = user.insert(&db).await.unwrap();
 
-    let users = Users::find().all(&db).await.unwrap();
-    println!("{:?}", users)
+    //let users = Users::find().all(&db).await.unwrap();
+    //println!("{:?}", users)
 }
 
 

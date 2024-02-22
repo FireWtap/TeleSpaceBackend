@@ -1,0 +1,29 @@
+[package]
+name = "api"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+sea-orm = { version = "0.12", features = [
+    "sqlx-sqlite",
+    "runtime-tokio-native-tls",
+    "macros",
+    "debug-print",
+    "with-time",
+    "with-json",
+] }
+async-stream = { version = "0.3" }
+async-trait = { version = "0.1" }
+futures = { version = "0.3" }
+futures-util = { version = "0.3" }
+rocket = { version = "0.5.0", features = ["json"] }
+rocket_dyn_templates = { version = "0.1.0-rc.1", features = ["tera"] }
+serde_json = { version = "1" }
+entity = { path = "../entity" }
+migration = { path = "../migration" }
+tokio = "1.29.0"
+
+[dependencies.sea-orm-rocket]
+version = "0.5"
