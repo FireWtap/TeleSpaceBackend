@@ -1,7 +1,5 @@
 use crate::m20240221_184457_users::Users;
-use crate::SchemaStatement::ForeignKeyStatement;
 use sea_orm_migration::prelude::*;
-use std::fs::File;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;

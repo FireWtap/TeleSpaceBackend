@@ -2,24 +2,43 @@
 extern crate rocket;
 
 use rocket::fairing::{self, AdHoc};
-use rocket::form::{Context, Form};
 use rocket::fs::{relative, FileServer};
-use rocket::request::FlashMessage;
-use rocket::response::{Flash, Redirect};
-use rocket::{Build, Request, Rocket};
-use rocket_dyn_templates::Template;
-use serde_json::json;
+use rocket::response::content;
+use rocket::{Build, Response, Rocket};
+use rocket::form::Form;
+use rocket::response::status::NotFound;
+use sea_orm::ActiveValue::Set;
+use sea_orm::{ColumnTrait, Cursor, DatabaseConnection, EntityTrait, QueryFilter};
 
 use migration::MigratorTrait;
 use sea_orm_rocket::{Connection, Database};
 
 mod pool;
+mod jwtauth;
+mod responses;
+
 use pool::Db;
 
+use entity::prelude::Users;
 pub use entity::*;
+use crate::jwtauth::jwt::create_jwt;
+use crate::responses::{NetworkResponse, ResponseBody};
+use crate::responses::ResponseBody::AuthToken;
 
 const DEFAULT_POSTS_PER_PAGE: u64 = 5;
 
+#[get("/")]
+async fn root(conn: Connection<'_, Db>) -> content::RawJson<String> {
+    let db = conn.into_inner();
+
+    let user = users::ActiveModel {
+        id: Default::default(),
+        email: Set(String::from("Massafra32@gmail.com")),
+        password_hash: Set(String::from("Pasqi")),
+    };
+    let users = Users::find().into_json().all(db).await.unwrap();
+    content::RawJson(format!("users:'{:?}'", users))
+}
 /*
 #[get("/new")]
 async fn new() -> Template {
@@ -132,6 +151,48 @@ pub fn not_found(req: &Request<'_>) -> Template {
     )
 }
 */
+
+pub struct User {
+    pub id: i32,
+    pub email: String,
+    pub password: String,
+}
+async fn login_user(conn: Connection<'_, Db>, email: &String, password: &String)  -> Result<String, NetworkResponse>  {
+    let db:&DatabaseConnection = conn.into_inner();
+    //let users = Users::find().all(&db).await.unwrap();
+    let check = Users::find().filter(users::Column::Email.contains(email)).filter(users::Column::PasswordHash.contains(password)).one(db).await.unwrap().unwrap();
+    /*if( == 0){
+        let response = responses::Response{
+            body: ResponseBody::Message("Not found user".to_string())
+        };
+        return Err(NetworkResponse::NotFound(serde_json::to_string(&response).unwrap()));
+    }
+    match create_jwt(check.unwrap().id){
+        Ok(Token) => Ok(Token),
+        Err(err) => Err(NetworkResponse::BadRequest(err.to_string()))
+    }*/
+    println!("{:?}", check);
+    return Ok("prova".to_string())
+}
+
+struct LoginReq{
+    email: String,
+    password_hash: String
+}
+#[post("/login", data = "<user>")]
+async fn login_user_handler(conn: Connection<'_, Db>, user: Form<LoginReq>){
+    let form = user.into_inner();
+    let email:String = form.email;
+    let password:String = form.password_hash;
+    let token = login_user(conn, &email, &password);
+    let response = responses::Response{
+        body: ResponseBody::Message(token)
+    };
+    Ok(serde_json::to_string(&response).unwrap());
+}
+
+
+
 async fn run_migrations(rocket: Rocket<Build>) -> fairing::Result {
     let conn = &Db::fetch(&rocket).unwrap().conn;
     let _ = migration::Migrator::up(conn, None).await;
@@ -144,10 +205,7 @@ async fn start() -> Result<(), rocket::Error> {
         .attach(Db::init())
         .attach(AdHoc::try_on_ignite("Migrations", run_migrations))
         //.mount("/", FileServer::from(relative!("/static")))
-        .mount(
-            "/",
-            routes![],
-        )
+        .mount("/", routes![root])
         .register("/", catchers![])
         //.attach(Template::fairing())
         .launch()

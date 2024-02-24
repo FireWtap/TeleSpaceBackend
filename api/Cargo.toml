@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[env]
+JWT_SECRET="prova schifo"
+
 
 [dependencies]
 sea-orm = { version = "0.12", features = [
@@ -23,7 +26,11 @@ rocket_dyn_templates = { version = "0.1.0-rc.1", features = ["tera"] }
 serde_json = { version = "1" }
 entity = { path = "../entity" }
 migration = { path = "../migration" }
+service = { path = "../service" }
 tokio = "1.29.0"
-
+serde = { version = "1.0.147", features = ["derive"] }
+chrono = "0.4.23"
+jsonwebtoken = "8.1.1"
+dotenvy = "0.15"
 [dependencies.sea-orm-rocket]
 version = "0.5"
