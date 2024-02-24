@@ -1,17 +1,18 @@
 use rocket::serde::Serialize;
 use rocket::Responder;
+use rocket::response::status;
 
-#[derive(Responder, Debug)]
+#[derive( Debug, Serialize)]
 pub enum NetworkResponse {
-    #[response(status = 201)]
+
+    Ok(String),
+
     Created(String),
-    #[response(status = 400)]
+
     BadRequest(String),
-    #[response(status = 401)]
+
     Unauthorized(String),
-    #[response(status = 404)]
     NotFound(String),
-    #[response(status = 409)]
     Conflict(String),
 }
 

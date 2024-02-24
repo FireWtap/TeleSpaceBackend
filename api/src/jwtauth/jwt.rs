@@ -19,7 +19,7 @@ use jsonwebtoken::errors::{Error, ErrorKind};
 use jsonwebtoken::{Algorithm, decode, DecodingKey, encode, EncodingKey, Header, Validation};
 
 pub fn create_jwt(id: i32) -> Result<String, Error> {
-    let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set."); // 👈 New!
+    let secret = env::var("JWT_SECRET").unwrap_or_else(|_| "your_default_secret".to_string());
 
     let expiration = Utc::now()
         .checked_add_signed(chrono::Duration::seconds(60))

@@ -3,24 +3,29 @@ extern crate rocket;
 
 use rocket::fairing::{self, AdHoc};
 use rocket::fs::{relative, FileServer};
-use rocket::response::content;
+use rocket::response::{content, status};
 use rocket::{Build, Response, Rocket};
 use rocket::form::Form;
 use rocket::response::status::NotFound;
+use rocket::serde::json::Json;
 use sea_orm::ActiveValue::Set;
-use sea_orm::{ColumnTrait, Cursor, DatabaseConnection, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, Cursor, DatabaseConnection, DbErr, EntityTrait, QueryFilter};
 
 use migration::MigratorTrait;
 use sea_orm_rocket::{Connection, Database};
+use teloxide::Bot;
+use teloxide::prelude::{Message, Requester};
 
 mod pool;
 mod jwtauth;
 mod responses;
+mod utils;
 
 use pool::Db;
 
 use entity::prelude::Users;
 pub use entity::*;
+use entity::users::Model;
 use crate::jwtauth::jwt::create_jwt;
 use crate::responses::{NetworkResponse, ResponseBody};
 use crate::responses::ResponseBody::AuthToken;
@@ -159,36 +164,43 @@ pub struct User {
 }
 async fn login_user(conn: Connection<'_, Db>, email: &String, password: &String)  -> Result<String, NetworkResponse>  {
     let db:&DatabaseConnection = conn.into_inner();
-    //let users = Users::find().all(&db).await.unwrap();
-    let check = Users::find().filter(users::Column::Email.contains(email)).filter(users::Column::PasswordHash.contains(password)).one(db).await.unwrap().unwrap();
-    /*if( == 0){
-        let response = responses::Response{
-            body: ResponseBody::Message("Not found user".to_string())
-        };
-        return Err(NetworkResponse::NotFound(serde_json::to_string(&response).unwrap()));
+    let user = Users::find()
+        .filter(users::Column::Email.eq(email))
+        .filter(users::Column::PasswordHash.eq(password))
+        .one(db)
+        .await
+        ;
+    match user{
+        Ok(Some(user)) => {
+            let token = create_jwt(user.id).map_err(|err| {
+                let response = responses::Response {
+                    body: ResponseBody::Message(format!("JWT creation error: {}", err)),
+                };
+                NetworkResponse::BadRequest(serde_json::to_string(&response).unwrap())
+            })?;
+            Ok(token)
+        }
+        _ => {
+            Err(NetworkResponse::NotFound("User not found or Wrong Password".to_string()))}
     }
-    match create_jwt(check.unwrap().id){
-        Ok(Token) => Ok(Token),
-        Err(err) => Err(NetworkResponse::BadRequest(err.to_string()))
-    }*/
-    println!("{:?}", check);
-    return Ok("prova".to_string())
-}
 
+
+}
+#[derive(FromForm)]
 struct LoginReq{
     email: String,
     password_hash: String
 }
 #[post("/login", data = "<user>")]
-async fn login_user_handler(conn: Connection<'_, Db>, user: Form<LoginReq>){
+async fn login_user_handler(conn: Connection<'_, Db>, user: Form<LoginReq>) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
     let form = user.into_inner();
     let email:String = form.email;
-    let password:String = form.password_hash;
-    let token = login_user(conn, &email, &password);
-    let response = responses::Response{
-        body: ResponseBody::Message(token)
-    };
-    Ok(serde_json::to_string(&response).unwrap());
+    let password:String = utils::encrypt_password(form.password_hash);
+    match login_user(conn, &email, &password).await {
+        Ok(token) => Ok(Json(NetworkResponse::Ok(token))),
+        Err(network_response) => Err(Json(network_response)),
+    }
+
 }
 
 
@@ -201,16 +213,22 @@ async fn run_migrations(rocket: Rocket<Build>) -> fairing::Result {
 
 #[tokio::main]
 async fn start() -> Result<(), rocket::Error> {
+
+    let bot = Bot::new("TOKEN HERE, WILL BE FROM ENV.".to_string());
+    teloxide::repl(bot, |bot: Bot, msg: Message| async move {
+        bot.send_dice(msg.chat.id).await?;
+        Ok(())
+    }).await;
     rocket::build()
         .attach(Db::init())
         .attach(AdHoc::try_on_ignite("Migrations", run_migrations))
-        //.mount("/", FileServer::from(relative!("/static")))
-        .mount("/", routes![root])
-        .register("/", catchers![])
-        //.attach(Template::fairing())
+        .mount("/", routes![root,login_user_handler])
         .launch()
         .await
         .map(|_| ())
+
+
+
 }
 
 pub fn main() {

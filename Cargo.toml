@@ -1,4 +1,4 @@
-workspace = { members = ["entity", ".", "migration", "api", "service"] }
+workspace = { members = ["entity", ".", "migration", "api"] }
 [package]
 name = "thesplitter"
 version = "0.1.0"
