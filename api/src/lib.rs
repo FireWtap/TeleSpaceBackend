@@ -1,20 +1,26 @@
 #[macro_use]
 extern crate rocket;
 
+use std::os::windows::fs::MetadataExt;
+use std::path::{Path, PathBuf};
+use dotenvy::dotenv;
 use rocket::fairing::{self, AdHoc};
-use rocket::fs::{relative, FileServer};
+use rocket::fs::{relative, FileServer, TempFile, FileName};
 use rocket::response::{content, status};
 use rocket::{Build, Response, Rocket};
+use rocket::data::{ByteUnit, Limits};
 use rocket::form::Form;
 use rocket::response::status::NotFound;
 use rocket::serde::json::Json;
 use sea_orm::ActiveValue::Set;
-use sea_orm::{ColumnTrait, Cursor, DatabaseConnection, DbErr, EntityTrait, QueryFilter};
+use sea_orm::{ActiveModelTrait, ColumnTrait, Cursor, DatabaseConnection, DbErr, EntityTrait, InsertResult, QueryFilter};
 
 use migration::MigratorTrait;
 use sea_orm_rocket::{Connection, Database};
 use teloxide::Bot;
+use teloxide::payloads::SendDocument;
 use teloxide::prelude::{Message, Requester};
+use teloxide::types::{ChatId, InputFile, Recipient};
 
 mod pool;
 mod jwtauth;
@@ -25,6 +31,7 @@ use pool::Db;
 
 use entity::prelude::Users;
 pub use entity::*;
+use entity::files::ActiveModel;
 use entity::users::Model;
 use crate::jwtauth::jwt::create_jwt;
 use crate::responses::{NetworkResponse, ResponseBody};
@@ -202,8 +209,55 @@ async fn login_user_handler(conn: Connection<'_, Db>, user: Form<LoginReq>) -> R
     }
 
 }
+#[derive(FromForm)]
+
+struct uploadFileForm<'f>{
+    file: TempFile<'f>,
+    user: u64
+}
+#[post("/uploadFile", data="<file_input>")]
+async fn upload_to_telegram_handler(conn: Connection<'_, Db>, mut file_input: Form<uploadFileForm<'_>>) -> Result<Json<NetworkResponse>, Json<NetworkResponse>>{
+
+    let mut file_name = std::env::var("UPLOAD_DIR").unwrap() + file_input.file.name().unwrap();
+    //Persist
+    println!("{}", &file_name);
+    file_input.file.persist_to(&file_name).await.unwrap();
+    let _ = uploader(conn, file_name.clone(), file_input.user, file_name.clone()).await;
+    Ok(Json(NetworkResponse::Ok("Andato".to_string())))
+}
 
 
+async fn uploader(conn: Connection<'_, Db>, path: String, user_id: u64, file_name: String){
+    let db = conn.into_inner();
+    println!("{}", path);
+    let parts = rust_file_splitting_utils::file_splitter::split(path.clone(), 40*1024*1024, None);
+    let file_opened = Path::new(&path);
+    let file_size = file_opened.metadata().unwrap().file_size();
+    let file = entity::files::ActiveModel{
+        id: Default::default(),
+        filename: Set(file_name),
+        r#type: Set(false),
+        original_size:  Set(file_size as i32) ,
+        user: Set(user_id as i32),
+        upload_time: Default::default(),
+    };
+    let res: InsertResult<ActiveModel>= entity::files::Entity::insert(file).exec(db).await.unwrap();
+    let file_id:i32 = res.last_insert_id;
+
+    for (pos,e) in parts.iter().enumerate(){
+        let bot = Bot::from_env();
+        println!("{}",e);
+        let chunk_id = bot.send_document(Recipient::Id(ChatId(1069912693)), InputFile::file(PathBuf::from(e))).await.unwrap();
+
+        let single_part = entity::chunks::ActiveModel{
+            id: Default::default(),
+            telegram_file_id: Set(chunk_id.id.to_string()),
+            order: Set(pos as i32),
+            file: Set(file_id),
+        };
+        single_part.insert(db).await.unwrap();
+    }
+}
 
 async fn run_migrations(rocket: Rocket<Build>) -> fairing::Result {
     let conn = &Db::fetch(&rocket).unwrap().conn;
@@ -213,20 +267,22 @@ async fn run_migrations(rocket: Rocket<Build>) -> fairing::Result {
 
 #[tokio::main]
 async fn start() -> Result<(), rocket::Error> {
+    dotenv().ok(); // Loads the environment
 
-    let bot = Bot::new("TOKEN HERE, WILL BE FROM ENV.".to_string());
-    teloxide::repl(bot, |bot: Bot, msg: Message| async move {
-        bot.send_dice(msg.chat.id).await?;
-        Ok(())
-    }).await;
+    let bot = Bot::from_env();
+
+
+
+    let limits = Limits::new().limit("forms", ByteUnit::from(100 * 1024 * 1024));;
+
     rocket::build()
         .attach(Db::init())
         .attach(AdHoc::try_on_ignite("Migrations", run_migrations))
         .mount("/", routes![root,login_user_handler])
+        .mount("/uploadTempTest", routes![upload_to_telegram_handler])
         .launch()
         .await
         .map(|_| ())
-
 
 
 }

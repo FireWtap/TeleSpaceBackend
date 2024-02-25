@@ -1,2 +1,5 @@
+[global.limits]
+forms = 131072
+
 [default.databases.sea_orm]
 url="sqlite://db.sqlite?mode=rwc"

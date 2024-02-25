@@ -2,12 +2,11 @@ use sea_orm::{ActiveModelTrait, ActiveValue, Database, DatabaseConnection, DbCon
 use std::fs::File;
 use std::{env, io};
 use sea_orm::ActiveValue::Set;
+
 use migration::{Migrator, MigratorTrait};
 use entity::*;
 use entity::prelude::Users;
-
-
-fn main() {
+ fn main() {
     let path = env::current_dir().unwrap();
     println!("The current directory is {}", path.display());
     tracing_subscriber::fmt()
@@ -15,6 +14,8 @@ fn main() {
         .with_test_writer()
         .init();
     api::main();
+
+
     //let parts = rust_file_splitting_utils::file_splitter::split(String::from("nana.mkv"), 1024 * 1024 * 10, None);
 
     //rust_file_splitting_utils::file_merger::merge(String::from("nana.mkv"), String::from("output/"),parts);

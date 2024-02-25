@@ -23,3 +23,4 @@ tracing-subscriber = "0.3.18"
 tracing = "0.1.40"
 rust_file_splitting_utils = { git = "https://github.com/FireWtap/RustFileSplitter", branch = "main" }
 cargo-watch = "8.5.2"
+dotenv = "0.15.0"

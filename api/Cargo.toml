@@ -30,5 +30,7 @@ jsonwebtoken = "8.1.1"
 dotenvy = "0.15"
 sha2 = "0.10.8"
 teloxide = { version = "0.12", features = ["macros"] }
+rust_file_splitting_utils = { git = "https://github.com/FireWtap/RustFileSplitter", branch = "main" }
+
 [dependencies.sea-orm-rocket]
 version = "0.5"

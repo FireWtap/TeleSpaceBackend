@@ -1,5 +1,6 @@
 use std::env;
 use chrono::Utc;
+use dotenvy::dotenv;
 use rocket::serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -19,7 +20,8 @@ use jsonwebtoken::errors::{Error, ErrorKind};
 use jsonwebtoken::{Algorithm, decode, DecodingKey, encode, EncodingKey, Header, Validation};
 
 pub fn create_jwt(id: i32) -> Result<String, Error> {
-    let secret = env::var("JWT_SECRET").unwrap_or_else(|_| "your_default_secret".to_string());
+    dotenv().ok();
+    let secret = std::env::var("JWT_SECRET").unwrap();
 
     let expiration = Utc::now()
         .checked_add_signed(chrono::Duration::seconds(60))
