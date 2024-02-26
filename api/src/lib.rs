@@ -1,13 +1,13 @@
 #[macro_use]
 extern crate rocket;
 
-use std::os::windows::fs::MetadataExt;
+
 use std::path::{Path, PathBuf};
 use dotenvy::dotenv;
 use rocket::fairing::{self, AdHoc};
 use rocket::fs::{relative, FileServer, TempFile, FileName};
 use rocket::response::{content, status};
-use rocket::{Build, Response, Rocket};
+use rocket::{Build, Config, Response, Rocket};
 use rocket::data::{ByteUnit, Limits};
 use rocket::form::Form;
 use rocket::response::status::NotFound;
@@ -230,9 +230,9 @@ async fn upload_to_telegram_handler(conn: Connection<'_, Db>, mut file_input: Fo
 async fn uploader(conn: Connection<'_, Db>, path: String, user_id: u64, file_name: String){
     let db = conn.into_inner();
     println!("{}", path);
-    let parts = rust_file_splitting_utils::file_splitter::split(path.clone(), 40*1024*1024, None);
+    let parts = rust_file_splitting_utils::file_splitter::split(path.clone(), 52000000, None);
     let file_opened = Path::new(&path);
-    let file_size = file_opened.metadata().unwrap().file_size();
+    let file_size = file_opened.metadata().unwrap().len();
     let file = entity::files::ActiveModel{
         id: Default::default(),
         filename: Set(file_name),
@@ -273,7 +273,7 @@ async fn start() -> Result<(), rocket::Error> {
 
 
 
-    let limits = Limits::new().limit("forms", ByteUnit::from(100 * 1024 * 1024));;
+    let limits = Limits::new().limit("forms", ByteUnit::from(1000 * 1024 * 1024));;
 
     rocket::build()
         .attach(Db::init())
