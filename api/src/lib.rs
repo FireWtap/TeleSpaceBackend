@@ -1,41 +1,47 @@
 #[macro_use]
 extern crate rocket;
 
-
-use std::path::{Path, PathBuf};
 use dotenvy::dotenv;
-use rocket::fairing::{self, AdHoc};
-use rocket::fs::{relative, FileServer, TempFile, FileName};
-use rocket::response::{content, status};
-use rocket::{Build, Config, Response, Rocket};
 use rocket::data::{ByteUnit, Limits};
+use rocket::fairing::{self, AdHoc};
 use rocket::form::Form;
+use rocket::fs::{relative, FileName, FileServer, TempFile};
 use rocket::response::status::NotFound;
+use rocket::response::{content, status};
 use rocket::serde::json::Json;
+use rocket::serde::Deserialize;
+use rocket::{Build, Config, Response, Rocket, State};
 use sea_orm::ActiveValue::Set;
-use sea_orm::{ActiveModelTrait, ColumnTrait, Cursor, DatabaseConnection, DbErr, EntityTrait, InsertResult, QueryFilter};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, Cursor, DatabaseConnection, DbErr, EntityTrait, InsertResult,
+    QueryFilter,
+};
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
 
 use migration::MigratorTrait;
 use sea_orm_rocket::{Connection, Database};
-use teloxide::Bot;
 use teloxide::payloads::SendDocument;
 use teloxide::prelude::{Message, Requester};
 use teloxide::types::{ChatId, InputFile, Recipient};
+use teloxide::Bot;
+use tokio::sync::Mutex;
 
-mod pool;
 mod jwtauth;
+mod pool;
 mod responses;
 mod utils;
 
 use pool::Db;
 
-use entity::prelude::Users;
-pub use entity::*;
-use entity::files::ActiveModel;
-use entity::users::Model;
-use crate::jwtauth::jwt::create_jwt;
-use crate::responses::{NetworkResponse, ResponseBody};
+use crate::jwtauth::jwt::{create_jwt, JWT};
 use crate::responses::ResponseBody::AuthToken;
+use crate::responses::{NetworkResponse, ResponseBody};
+use entity::files::ActiveModel;
+use entity::prelude::Users;
+use entity::users::Model;
+pub use entity::*;
+use service::downloader;
 
 const DEFAULT_POSTS_PER_PAGE: u64 = 5;
 
@@ -169,94 +175,72 @@ pub struct User {
     pub email: String,
     pub password: String,
 }
-async fn login_user(conn: Connection<'_, Db>, email: &String, password: &String)  -> Result<String, NetworkResponse>  {
-    let db:&DatabaseConnection = conn.into_inner();
-    let user = Users::find()
-        .filter(users::Column::Email.eq(email))
-        .filter(users::Column::PasswordHash.eq(password))
-        .one(db)
-        .await
-        ;
-    match user{
-        Ok(Some(user)) => {
-            let token = create_jwt(user.id).map_err(|err| {
-                let response = responses::Response {
-                    body: ResponseBody::Message(format!("JWT creation error: {}", err)),
-                };
-                NetworkResponse::BadRequest(serde_json::to_string(&response).unwrap())
-            })?;
-            Ok(token)
-        }
-        _ => {
-            Err(NetworkResponse::NotFound("User not found or Wrong Password".to_string()))}
-    }
 
-
-}
 #[derive(FromForm)]
-struct LoginReq{
+struct LoginReq {
     email: String,
-    password_hash: String
+    password_hash: String,
 }
 #[post("/login", data = "<user>")]
-async fn login_user_handler(conn: Connection<'_, Db>, user: Form<LoginReq>) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
+async fn login_user_handler(
+    conn: Connection<'_, Db>,
+    user: Form<LoginReq>,
+) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
     let form = user.into_inner();
-    let email:String = form.email;
-    let password:String = utils::encrypt_password(form.password_hash);
-    match login_user(conn, &email, &password).await {
+    let email: String = form.email;
+    let password: String = utils::encrypt_password(form.password_hash);
+    match jwtauth::jwt::login_user(conn.into_inner(), &email, &password).await {
         Ok(token) => Ok(Json(NetworkResponse::Ok(token))),
         Err(network_response) => Err(Json(network_response)),
     }
-
 }
 #[derive(FromForm)]
-
-struct uploadFileForm<'f>{
+struct UploadFileForm<'f> {
     file: TempFile<'f>,
-    user: u64
-}
-#[post("/uploadFile", data="<file_input>")]
-async fn upload_to_telegram_handler(conn: Connection<'_, Db>, mut file_input: Form<uploadFileForm<'_>>) -> Result<Json<NetworkResponse>, Json<NetworkResponse>>{
-
-    let mut file_name = std::env::var("UPLOAD_DIR").unwrap() + file_input.file.name().unwrap();
-    //Persist
-    println!("{}", &file_name);
-    file_input.file.persist_to(&file_name).await.unwrap();
-    let _ = uploader(conn, file_name.clone(), file_input.user, file_name.clone()).await;
-    Ok(Json(NetworkResponse::Ok("Andato".to_string())))
 }
 
-
-async fn uploader(conn: Connection<'_, Db>, path: String, user_id: u64, file_name: String){
-    let db = conn.into_inner();
-    println!("{}", path);
-    let parts = rust_file_splitting_utils::file_splitter::split(path.clone(), 52000000, None);
-    let file_opened = Path::new(&path);
-    let file_size = file_opened.metadata().unwrap().len();
-    let file = entity::files::ActiveModel{
-        id: Default::default(),
-        filename: Set(file_name),
-        r#type: Set(false),
-        original_size:  Set(file_size as i32) ,
-        user: Set(user_id as i32),
-        upload_time: Default::default(),
+#[post("/uploadFile", data = "<file_input>")]
+async fn upload_to_telegram_handler(
+    conn: Connection<'_, Db>,
+    bot: &State<GlobalState>,
+    mut file_input: Form<UploadFileForm<'_>>,
+    key: Result<JWT, NetworkResponse>,
+) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
+    let key = match key {
+        Ok(JWT { claims: c }) => Ok(c),
+        _ => Err(Json(NetworkResponse::Unauthorized(
+            "Requested unauthorized".to_string(),
+        ))),
     };
-    let res: InsertResult<ActiveModel>= entity::files::Entity::insert(file).exec(db).await.unwrap();
-    let file_id:i32 = res.last_insert_id;
 
-    for (pos,e) in parts.iter().enumerate(){
-        let bot = Bot::from_env();
-        println!("{}",e);
-        let chunk_id = bot.send_document(Recipient::Id(ChatId(1069912693)), InputFile::file(PathBuf::from(e))).await.unwrap();
+    let response = match key {
+        Ok(c) => {
+            let bot_guard = bot.bot.lock().await;
+            let bot = bot_guard.deref();
+            let mut file_name =
+                std::env::var("UPLOAD_DIR").unwrap() + file_input.file.name().unwrap();
+            file_input.file.persist_to(&file_name).await.unwrap();
+            let _ = service::uploader(
+                conn.into_inner(),
+                bot,
+                file_name.clone(),
+                c.subject_id as u64,
+                file_name,
+            )
+            .await;
+            Ok(Json(NetworkResponse::Ok("Andato".to_string())))
+        }
+        Err(err_response) => Err(err_response),
+    };
 
-        let single_part = entity::chunks::ActiveModel{
-            id: Default::default(),
-            telegram_file_id: Set(chunk_id.id.to_string()),
-            order: Set(pos as i32),
-            file: Set(file_id),
-        };
-        single_part.insert(db).await.unwrap();
-    }
+    response
+}
+
+#[get("/test/<id>")]
+async fn testing_download(conn: Connection<'_, Db>, bot: &State<GlobalState>, id: u64) {
+    let bot_guard = bot.bot.lock().await;
+    let bot = bot_guard.deref();
+    service::downloader(conn.into_inner(), bot, id).await;
 }
 
 async fn run_migrations(rocket: Rocket<Build>) -> fairing::Result {
@@ -265,26 +249,25 @@ async fn run_migrations(rocket: Rocket<Build>) -> fairing::Result {
     Ok(rocket)
 }
 
+struct GlobalState {
+    bot: Mutex<Bot>,
+}
+
 #[tokio::main]
 async fn start() -> Result<(), rocket::Error> {
     dotenv().ok(); // Loads the environment
 
-    let bot = Bot::from_env();
-
-
-
-    let limits = Limits::new().limit("forms", ByteUnit::from(1000 * 1024 * 1024));;
-
     rocket::build()
         .attach(Db::init())
         .attach(AdHoc::try_on_ignite("Migrations", run_migrations))
-        .mount("/", routes![root,login_user_handler])
+        .mount("/", routes![root, login_user_handler, testing_download])
         .mount("/uploadTempTest", routes![upload_to_telegram_handler])
+        .manage(GlobalState {
+            bot: Mutex::from(Bot::from_env()),
+        })
         .launch()
         .await
         .map(|_| ())
-
-
 }
 
 pub fn main() {
