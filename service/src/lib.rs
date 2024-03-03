@@ -1,3 +1,6 @@
+pub mod task_queue;
+pub mod worker;
+
 use entity::chunks::*;
 use entity::files::*;
 use entity::prelude::{Chunks, Files};
@@ -22,26 +25,13 @@ pub async fn uploader(
     db: &DatabaseConnection,
     bot: &Bot,
     path: String,
-    user_id: u64,
-    file_name: String,
-) {
+    uuid: Uuid,
+    file_id: i32
+) -> i32 {
     println!("Uploading file: {}", path);
     println!("Splitting...");
     let parts = rust_file_splitting_utils::file_splitter::split(path.clone(), 19922944, None);
-    let file_opened = Path::new(&path);
-    let file_size = file_opened.metadata().unwrap().len();
-    let file = files::ActiveModel {
-        id: Default::default(),
-        filename: Set(file_name),
-        r#type: Set(false),
-        original_size: Set(file_size as i32),
-        user: Set(user_id as i32),
-        upload_time: Default::default(),
-    };
-    //Adding file row to db
-    let res: InsertResult<files::ActiveModel> =
-        entity::files::Entity::insert(file).exec(db).await.unwrap();
-    let file_id: i32 = res.last_insert_id;
+
     //Uploading the pieces to telegram
     for (pos, e) in parts.iter().enumerate() {
         let pos = pos + 1;
@@ -68,9 +58,10 @@ pub async fn uploader(
 
     fs::remove_dir("Out").unwrap();
     fs::remove_file(path).unwrap();
+    file_id
 }
 
-pub async fn downloader(db: &DatabaseConnection, bot: &Bot, db_file_id: u64) -> String{
+pub async fn downloader(db: &DatabaseConnection, bot: &Bot, db_file_id: u64, uuid: Uuid) -> String {
     let file_info = Files::find_by_id(db_file_id as i32)
         .one(db)
         .await
@@ -101,10 +92,18 @@ pub async fn downloader(db: &DatabaseConnection, bot: &Bot, db_file_id: u64) -> 
         println!("{:?}", i);
     }
 
-    let result_dir = format!("{}{}", chunk_dir,file_info.filename);
-    merge(file_info.filename, "out/".to_string(), chunk_path_list.clone(), true);
-    for i in chunk_path_list.iter(){
-        tokio::fs::remove_file(i).await.unwrap();
+    let result_dir = format!("{}{}", &chunk_dir, file_info.filename);
+    println!("{}", result_dir);
+    tokio::fs::File::create(format!("{}{}", "", file_info.filename)).await;
+    merge(
+        file_info.filename.clone(),
+        "".to_string(),
+        chunk_path_list.clone(),
+        true,
+    );
+    for i in chunk_path_list.iter() {
+        tokio::fs::remove_file(i).await;
     }
-    result_dir
+    tokio::fs::remove_dir(chunk_dir).await;
+    file_info.filename
 }

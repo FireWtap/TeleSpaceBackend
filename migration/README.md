@@ -35,7 +35,7 @@
     ```sh
     cargo run -- reset
     ```
-- Check the status of all migrations
+- Check the Status of all migrations
     ```sh
-    cargo run -- status
+    cargo run -- Status
     ```

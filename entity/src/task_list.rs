@@ -3,14 +3,12 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "chunks")]
+#[sea_orm(table_name = "task_list")]
 pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
-    #[sea_orm(unique)]
-    pub telegram_file_id: String,
-    pub order: i32,
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub id: String,
     pub file: i32,
+    pub status: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

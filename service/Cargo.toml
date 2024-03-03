@@ -15,11 +15,20 @@ rocket_dyn_templates = { version = "0.1.0-rc.1", features = ["tera"] }
 serde_json = { version = "1" }
 entity = { path = "../entity" }
 migration = { path = "../migration" }
-tokio = "1.29.0"
 serde = { version = "1.0.147", features = ["derive"] }
 chrono = "0.4.23"
 jsonwebtoken = "8.1.1"
 dotenvy = "0.15"
 sha2 = "0.10.8"
 teloxide = { version = "0.12", features = ["macros"] }
-rust_file_splitting_utils = { git = "https://github.com/FireWtap/RustFileSplitter", branch = "main", version = "0.1.1" }
+rust_file_splitting_utils = { git = "https://github.com/FireWtap/RustFileSplitter", branch = "main", version = "0.1.4" }
+sea-orm = { version = "0.12", features = [
+    "sqlx-sqlite",
+    "runtime-tokio-native-tls",
+    "macros",
+    "debug-print",
+    "with-time",
+    "with-json",
+] }
+
+tokio = { version = "1.36.0", features = ["full"] }

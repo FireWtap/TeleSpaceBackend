@@ -1,6 +1,4 @@
-use rocket::response::status;
 use rocket::serde::Serialize;
-use rocket::Responder;
 
 #[derive(Debug, Serialize)]
 pub enum NetworkResponse {

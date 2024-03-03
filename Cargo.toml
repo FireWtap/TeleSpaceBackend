@@ -21,6 +21,7 @@ api = {path = "api"}
 tokio = { version = "1.0.0", features = ["rt", "rt-multi-thread", "macros"] }
 tracing-subscriber = "0.3.18"
 tracing = "0.1.40"
-rust_file_splitting_utils = { git = "https://github.com/FireWtap/RustFileSplitter", branch = "main", version = "0.1.1" }
+rust_file_splitting_utils = { git = "https://github.com/FireWtap/RustFileSplitter", branch = "main", version = "0.1.4" }
 cargo-watch = "8.5.2"
 dotenv = "0.15.0"
+unescape = "0.1.0"

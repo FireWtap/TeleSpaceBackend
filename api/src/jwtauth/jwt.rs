@@ -12,7 +12,7 @@ use rocket::request::{self, FromRequest, Request};
 use rocket::serde::{Deserialize, Serialize};
 use sea_orm::{ColumnTrait, QueryFilter};
 use sea_orm::{DatabaseConnection, EntityTrait};
-use sea_orm_rocket::Connection;
+
 use std::env;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -31,7 +31,7 @@ pub fn create_jwt(id: i32) -> Result<String, Error> {
     let secret = std::env::var("JWT_SECRET").unwrap();
 
     let expiration = Utc::now()
-        .checked_add_signed(chrono::Duration::seconds(24*60*60))
+        .checked_add_signed(chrono::Duration::seconds(24 * 60 * 60))
         .expect("Invalid timestamp")
         .timestamp();
 
@@ -89,7 +89,9 @@ impl<'r> FromRequest<'r> for JWT {
                 Err(err) => match &err.kind() {
                     jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
                         let response = Response {
-                            body: ResponseBody::Message("Error validating JWT token - Expired Token".to_string()),
+                            body: ResponseBody::Message(
+                                "Error validating JWT token - Expired Token".to_string(),
+                            ),
                         };
                         Outcome::Error((
                             Status::Unauthorized,
@@ -100,7 +102,9 @@ impl<'r> FromRequest<'r> for JWT {
                     }
                     jsonwebtoken::errors::ErrorKind::InvalidToken => {
                         let response = Response {
-                            body: ResponseBody::Message("Error validating JWT token - Invalid Token".to_string()),
+                            body: ResponseBody::Message(
+                                "Error validating JWT token - Invalid Token".to_string(),
+                            ),
                         };
                         Outcome::Error((
                             Status::Unauthorized,
