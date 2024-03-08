@@ -9,6 +9,9 @@ pub struct Model {
     pub id: String,
     pub file: i32,
     pub status: String,
+    pub add_time: Option<String>,
+    pub completion_time: Option<String>,
+    pub r#type: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

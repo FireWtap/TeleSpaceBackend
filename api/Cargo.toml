@@ -34,6 +34,8 @@ teloxide = { version = "0.12", features = ["macros"] }
 rust_file_splitting_utils = { git = "https://github.com/FireWtap/RustFileSplitter", branch = "main", version = "0.1.4" }
 unescape = "0.1.0"
 tracing = "0.1.40"
+rocket_cors = "0.6.0"
+
 
 [dependencies.sea-orm-rocket]
 version = "0.5"

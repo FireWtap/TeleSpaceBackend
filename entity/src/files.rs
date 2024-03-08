@@ -13,6 +13,8 @@ pub struct Model {
     pub original_size: i32,
     pub user: i32,
     pub upload_time: Option<String>,
+    pub locally_stored: Option<bool>,
+    pub last_download: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

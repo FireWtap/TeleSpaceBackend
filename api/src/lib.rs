@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate rocket;
 
-use std::env;
 use dotenvy::dotenv;
+use std::env;
 
 use rocket::fairing::{self, AdHoc};
 use rocket::form::Form;
@@ -11,16 +11,22 @@ use rocket::fs::TempFile;
 use rocket::response::content;
 use rocket::serde::json::{json, Json};
 
+use rocket::yansi::Paint;
 use rocket::{Build, Rocket, State};
 use sea_orm::ActiveValue::Set;
-use sea_orm::{DatabaseConnection, EntityTrait, InsertResult, QueryOrder};
+use sea_orm::{
+    ColumnTrait, Condition, DatabaseConnection, EntityTrait, InsertResult, JoinType, QueryFilter,
+    QueryOrder, QuerySelect, Related,
+};
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
-use rocket::yansi::Paint;
+use rocket::http::Method;
+use rocket_cors::{AllowedHeaders, AllowedOrigins, CorsOptions};
 
 use sea_orm::prelude::Uuid;
 use sea_orm_rocket::{Connection, Database, Initializer};
+use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use migration::MigratorTrait;
@@ -39,8 +45,9 @@ use crate::jwtauth::jwt::JWT;
 
 use crate::responses::NetworkResponse;
 
-use entity::prelude::{Files, Users};
+use entity::prelude::{Files, TaskList, Users};
 
+use entity::task_list::Model;
 pub use entity::*;
 use service::task_queue;
 
@@ -80,7 +87,6 @@ async fn login_user_handler(
     }
 }
 
-
 #[derive(FromForm)]
 struct UploadFileForm<'f> {
     file: TempFile<'f>,
@@ -117,11 +123,15 @@ async fn upload_to_telegram_handler(
                 r#type: Set(false),
                 original_size: Set(file_size as i32),
                 user: Set(c.subject_id),
-                upload_time: Default::default()
+                upload_time: Default::default(),
+                last_download: Set(None),
+                locally_stored: Set(None),
             };
             //Adding file row to db
-            let res: InsertResult<files::ActiveModel> =
-                entity::files::Entity::insert(file).exec(conn.into_inner()).await.unwrap();
+            let res: InsertResult<files::ActiveModel> = entity::files::Entity::insert(file)
+                .exec(conn.into_inner())
+                .await
+                .unwrap();
             let file_id: i32 = res.last_insert_id;
             //Creating task
             let task_uuid = Uuid::new_v4();
@@ -130,11 +140,11 @@ async fn upload_to_telegram_handler(
                 file_path: file_name.clone(),
                 user_id: c.subject_id as u64,
                 file_name: file_name.clone(),
-                file_id: file_id as u64
+                file_id: file_id as u64,
             };
 
             task_queue.add_task(upload_task).await.unwrap();
-            //Returns uuid of the task. Can be used to query and check if the file has been correctly uploaded to telegram or not
+            //Returns uuid of the task. Can be used to query and check if the file has been correctly
             Ok(Json(NetworkResponse::Ok(String::from(task_uuid))))
         }
         Err(err_response) => Err(err_response),
@@ -172,11 +182,128 @@ async fn list_all(
     response
 }
 
-#[get("/test/<id>")]
-async fn testing_download(conn: Connection<'_, Db>, bot: &State<GlobalState>, id: u64) {
-    let bot_guard = bot.bot.lock().await;
-    let bot = bot_guard.deref();
-    service::downloader(conn.into_inner(), bot, id, Uuid::new_v4()).await;
+#[get("/downloadFile/<id>")]
+async fn download_file_handler(
+    conn: Connection<'_, Db>,
+    state: &State<GlobalState>,
+    id: u64,
+    key: Result<JWT, NetworkResponse>,
+) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
+    let key = match key {
+        Ok(JWT { claims: c }) => Ok(c),
+        _ => Err(Json(NetworkResponse::Unauthorized(
+            "Requested unauthorized".to_string(),
+        ))),
+    };
+
+    let response = match key {
+        Ok(c) => {
+            let db = conn.into_inner();
+            //service::downloader(&conn.into_inner(), bot, id, Uuid::new_v4()).await;
+            //check if file is locally stored
+            let file_info = Files::find_by_id(id as i32).one(db).await.unwrap().unwrap();
+            if !file_info.locally_stored.is_none() && file_info.locally_stored.unwrap().eq(&true) {
+                return Err(Json::from(NetworkResponse::Ok(
+                    "File already stored locally, just download it".to_string(),
+                )));
+            }
+            //check if the file has been successfully downloaded though looking the task list and seeing if the last job for it has been completed
+            let related_task = TaskList::find()
+                .filter(task_list::Column::File.eq(id))
+                .filter(task_list::Column::Type.eq(1))
+                .order_by_asc(task_list::Column::CompletionTime)
+                .one(db)
+                .await
+                .unwrap();
+
+            match related_task {
+                None => Err(Json::from(NetworkResponse::NotFound(
+                    "File not found or yet to be uploaded".to_string(),
+                ))),
+                Some(_) => {
+                    //File has been successfully uploaded to telegram, which means we can download it locally and return an UUID to retrieve the download link
+                    //put a new task in list and return the uuid of the new task that will be a download task
+                    let task_uuid = Uuid::new_v4();
+                    let task = TaskType::Download {
+                        id: task_uuid,
+                        db_file_id: id,
+                        user_id: c.subject_id as u64,
+                    };
+                    //Get the queue
+                    let task_queue = &state.queue;
+                    task_queue.add_task(task).await.unwrap();
+                    Ok(Json(NetworkResponse::Ok(String::from(task_uuid))))
+                }
+            }
+        }
+        Err(e) => Err(e),
+    };
+    response
+}
+#[derive(Serialize, Deserialize)]
+struct StatusResponse {
+    uuid: String,
+    status: String,
+    resource: Option<u64>,
+    r#type: bool,
+}
+#[get("/getStatus/<uuid>")]
+pub async fn get_status_handler(
+    conn: Connection<'_, Db>,
+    uuid: &str,
+    key: Result<JWT, NetworkResponse>,
+) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
+    let key = match key {
+        Ok(JWT { claims: c }) => Ok(c),
+        _ => Err(Json(NetworkResponse::Unauthorized(
+            "Requested unauthorized".to_string(),
+        ))),
+    };
+    let db = conn.into_inner();
+    let response = match key {
+        Ok(c) => {
+            let task = TaskList::find()
+                .find_with_related(Files)
+                .filter(<entity::prelude::TaskList as EntityTrait>::Column::Id.eq(uuid))
+                .all(db)
+                .await
+                .unwrap();
+            if task.is_empty() || task[0].1.is_empty() {
+                return Err(Json(NetworkResponse::NotFound(
+                    "Task or file not found".to_string(),
+                )));
+            }
+            let related_task = &task[0].0;
+            let related_file = &task[0].1[0];
+            let user_id = c.subject_id;
+
+            if user_id.eq(&related_file.user) {
+                //User is authorized
+                let mut ok_response = StatusResponse {
+                    uuid: uuid.to_string(),
+                    r#type: related_task.r#type,
+                    status: related_task.status.clone(),
+                    resource: None,
+                };
+                if (related_task.status.eq("COMPLETED")) {
+                    ok_response.resource = Option::from(related_file.id as u64);
+                }
+
+                Ok(Json(NetworkResponse::Ok(json!(ok_response).to_string())))
+            } else {
+                Err(Json(NetworkResponse::Unauthorized(
+                    "Unauthorized user for this file.".to_string(),
+                )))
+            }
+        }
+        Err(e) => Err(e),
+    };
+    response
+    //check if there is a task with that uuid and if the file is correlated to the user retrieving the status
+    //if it exists:
+    //completed: return link to downloadable file or whatever if the task is a download one
+    //working/waiting, just status
+    //completed but upload: just status
 }
 
 async fn run_migrations(rocket: Rocket<Build>) -> fairing::Result {
@@ -201,22 +328,49 @@ async fn start() -> Result<(), rocket::Error> {
     debug!("Init bot connection...");
     let bot = Bot::from_env();
 
-
     let worker_bot = Bot::from_env();
-    let worker_connection: DatabaseConnection = sea_orm::Database::connect("sqlite://db.sqlite?mode=rwc").await.unwrap();
+    let worker_connection: DatabaseConnection =
+        sea_orm::Database::connect("sqlite://db.sqlite?mode=rwc")
+            .await
+            .unwrap();
     let worker = tokio::spawn(async move {
         worker(receiver, Arc::new(worker_connection), worker_bot).await;
     });
+
+    debug!("Setting up CORS...");
+    let allowed_origins = AllowedOrigins::some_exact(&[
+        "http://localhost:5173", // Aggiungi qui altri domini se necessario
+    ]);
+    let allowed_origins = AllowedOrigins::all();
+    let cors = CorsOptions {
+        allowed_origins,
+        allowed_methods: vec![rocket::http::Method::Get, rocket::http::Method::Post].into_iter().map(From::from).collect(),
+        allowed_headers: rocket_cors::AllowedHeaders::some(&[
+            "Authorization",
+            "Accept",
+            "Content-Type"
+        ]),
+        allow_credentials: true,
+        ..Default::default()
+    }
+        .to_cors().expect("CORS configuration failed");
 
     debug!("Firing up rocket");
     rocket::build()
         .attach(db)
         .attach(AdHoc::try_on_ignite("Migrations", run_migrations))
+        .attach(cors)
         .mount(
             "/",
-            routes![root, login_user_handler, testing_download, list_all],
+            routes![
+                root,
+                login_user_handler,
+                download_file_handler,
+                list_all,
+                upload_to_telegram_handler,
+                get_status_handler
+            ],
         )
-        .mount("/uploadTempTest", routes![upload_to_telegram_handler])
         .manage(GlobalState {
             bot: Mutex::from(bot.clone()),
             queue: task_queue,
@@ -224,7 +378,6 @@ async fn start() -> Result<(), rocket::Error> {
         .launch()
         .await
         .map(|_| ())
-
 }
 
 pub fn main() {

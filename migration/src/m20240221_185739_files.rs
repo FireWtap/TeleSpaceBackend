@@ -30,6 +30,8 @@ impl MigrationTrait for Migration {
                             .timestamp()
                             .extra("DEFAULT CURRENT_TIMESTAMP".to_string()),
                     )
+                    .col(ColumnDef::new(Files::LocallyStored).boolean())
+                    .col(ColumnDef::new(Files::LastDownload).timestamp())
                     .foreign_key(
                         ForeignKeyCreateStatement::new()
                             .name("FK_User_Files")
@@ -61,4 +63,6 @@ pub enum Files {
     OriginalSize,
     UploadTime,
     User,
+    LocallyStored,
+    LastDownload,
 }

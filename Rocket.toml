@@ -1,6 +1,6 @@
 [global.limits]
-file="10 GiB"
-data-form="10 GiB"
-form="10 GiB"
+file="15 GiB"
+data-form="15 GiB"
+form="15 GiB"
 [default.databases.sea_orm]
 url="sqlite://db.sqlite?mode=rwc"
