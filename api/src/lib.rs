@@ -21,7 +21,6 @@ use sea_orm::{
     QueryOrder, QuerySelect, Related,
 };
 use std::ops::Deref;
-use std::os::unix::process::parent_id;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -56,7 +55,7 @@ use service::task_queue;
 use service::task_queue::TaskType::Upload;
 use service::task_queue::{TaskQueue, TaskType};
 use service::worker::worker;
-use crate::handlers::dir_handlers::new_dir_handler;
+use crate::handlers::dir_handlers::{get_directory_name_handler, list_directory, new_dir_handler};
 
 const DEFAULT_POSTS_PER_PAGE: u64 = 5;
 
@@ -332,7 +331,6 @@ pub async fn get_status_handler(
 
 #[get("/me")]
 async fn get_me_handler(
-    conn: Connection<'_, Db>,
     key: Result<JWT, NetworkResponse>,
 ) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
     let key = match key {
@@ -388,7 +386,7 @@ async fn start() -> Result<(), rocket::Error> {
     let allowed_origins = AllowedOrigins::all();
     let cors = CorsOptions {
         allowed_origins,
-        allowed_methods: vec![rocket::http::Method::Get, rocket::http::Method::Post]
+        allowed_methods: vec![rocket::http::Method::Get, rocket::http::Method::Post, Method::Delete]
             .into_iter()
             .map(From::from)
             .collect(),
@@ -418,7 +416,9 @@ async fn start() -> Result<(), rocket::Error> {
                 upload_to_telegram_handler,
                 get_status_handler,
                 get_me_handler,
-                new_dir_handler
+                new_dir_handler,
+                list_directory,
+                get_directory_name_handler
             ],
         )
         .manage(GlobalState {

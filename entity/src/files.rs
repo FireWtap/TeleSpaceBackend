@@ -59,5 +59,9 @@ impl Related<super::users::Entity> for Entity {
         Relation::Users.def()
     }
 }
-
+impl Related<super::files::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::SelfRef.def()
+    }
+}
 impl ActiveModelBehavior for ActiveModel {}
