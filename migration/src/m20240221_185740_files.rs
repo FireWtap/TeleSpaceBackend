@@ -32,6 +32,7 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(Files::LocallyStored).boolean())
                     .col(ColumnDef::new(Files::LastDownload).timestamp())
+                    .col(ColumnDef::new(Files::ParentDir).integer().null())
                     .foreign_key(
                         ForeignKeyCreateStatement::new()
                             .name("FK_User_Files")
@@ -39,6 +40,13 @@ impl MigrationTrait for Migration {
                             .from_col(Files::User)
                             .to_tbl(Users::Table)
                             .to_col(Users::Id),
+                    )
+                    .foreign_key(
+                        ForeignKeyCreateStatement::new()
+                            .from_tbl(Files::Table)
+                            .from_col(Files::ParentDir)
+                            .to_tbl(Files::Table)
+                            .to_col(Files::Id),
                     )
                     .to_owned(),
             )
@@ -65,4 +73,5 @@ pub enum Files {
     User,
     LocallyStored,
     LastDownload,
+    ParentDir, // Aggiunto
 }

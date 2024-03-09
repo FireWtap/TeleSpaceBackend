@@ -15,12 +15,21 @@ pub struct Model {
     pub upload_time: Option<String>,
     pub locally_stored: Option<bool>,
     pub last_download: Option<String>,
+    pub parent_dir: Option<i32>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(has_many = "super::chunks::Entity")]
     Chunks,
+    #[sea_orm(
+        belongs_to = "Entity",
+        from = "Column::ParentDir",
+        to = "Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    SelfRef,
     #[sea_orm(has_many = "super::task_list::Entity")]
     TaskList,
     #[sea_orm(

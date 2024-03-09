@@ -18,6 +18,7 @@ use std::env;
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Claims {
     pub subject_id: i32,
+    pub email: String,
     exp: usize,
 }
 
@@ -26,7 +27,7 @@ pub struct JWT {
     pub claims: Claims,
 }
 
-pub fn create_jwt(id: i32) -> Result<String, Error> {
+pub fn create_jwt(id: i32, user_email: String) -> Result<String, Error> {
     dotenv().ok();
     let secret = std::env::var("JWT_SECRET").unwrap();
 
@@ -39,6 +40,7 @@ pub fn create_jwt(id: i32) -> Result<String, Error> {
     let claims = Claims {
         subject_id: id,
         exp: expiration as usize,
+        email: user_email,
     };
 
     // 👇 New!
@@ -145,7 +147,7 @@ pub async fn login_user(
         .await;
     match user {
         Ok(Some(user)) => {
-            let token = create_jwt(user.id).map_err(|err| {
+            let token = create_jwt(user.id, user.email).map_err(|err| {
                 let response = responses::Response {
                     body: ResponseBody::Message(format!("JWT creation error: {}", err)),
                 };

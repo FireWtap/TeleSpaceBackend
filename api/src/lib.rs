@@ -11,18 +11,19 @@ use rocket::fs::TempFile;
 use rocket::response::content;
 use rocket::serde::json::{json, Json};
 
+use rocket::http::Method;
 use rocket::yansi::Paint;
 use rocket::{Build, Rocket, State};
+use rocket_cors::{AllowedHeaders, AllowedOrigins, CorsOptions};
 use sea_orm::ActiveValue::Set;
 use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, InsertResult, JoinType, QueryFilter,
     QueryOrder, QuerySelect, Related,
 };
 use std::ops::Deref;
+use std::os::unix::process::parent_id;
 use std::path::Path;
 use std::sync::Arc;
-use rocket::http::Method;
-use rocket_cors::{AllowedHeaders, AllowedOrigins, CorsOptions};
 
 use sea_orm::prelude::Uuid;
 use sea_orm_rocket::{Connection, Database, Initializer};
@@ -38,6 +39,7 @@ mod jwtauth;
 mod pool;
 mod responses;
 mod utils;
+mod handlers;
 
 use pool::Db;
 
@@ -54,6 +56,7 @@ use service::task_queue;
 use service::task_queue::TaskType::Upload;
 use service::task_queue::{TaskQueue, TaskType};
 use service::worker::worker;
+use crate::handlers::dir_handlers::new_dir_handler;
 
 const DEFAULT_POSTS_PER_PAGE: u64 = 5;
 
@@ -87,11 +90,14 @@ async fn login_user_handler(
     }
 }
 
+
+
+
 #[derive(FromForm)]
 struct UploadFileForm<'f> {
     file: TempFile<'f>,
+    dir: i32,
 }
-
 #[post("/uploadFile", data = "<file_input>")]
 async fn upload_to_telegram_handler(
     conn: Connection<'_, Db>,
@@ -109,51 +115,69 @@ async fn upload_to_telegram_handler(
     let response = match key {
         Ok(c) => {
             let task_queue = &state.queue;
-
+            let db = conn.into_inner();
             let file_name = std::env::var("UPLOAD_DIR").unwrap() + file_input.file.name().unwrap();
 
-            //Persist to upload_dir
-            file_input.file.persist_to(&file_name).await.unwrap();
-            //Insert the file into db and start the upload to telegram through inserting the task into queue
-            let file_opened = Path::new(&file_name);
-            let file_size = file_opened.metadata().unwrap().len();
-            let file = files::ActiveModel {
-                id: Default::default(),
-                filename: Set(file_name.clone()),
-                r#type: Set(false),
-                original_size: Set(file_size as i32),
-                user: Set(c.subject_id),
-                upload_time: Default::default(),
-                last_download: Set(None),
-                locally_stored: Set(None),
-            };
-            //Adding file row to db
-            let res: InsertResult<files::ActiveModel> = entity::files::Entity::insert(file)
-                .exec(conn.into_inner())
-                .await
-                .unwrap();
-            let file_id: i32 = res.last_insert_id;
-            //Creating task
-            let task_uuid = Uuid::new_v4();
-            let upload_task = task_queue::TaskType::Upload {
-                id: task_uuid,
-                file_path: file_name.clone(),
-                user_id: c.subject_id as u64,
-                file_name: file_name.clone(),
-                file_id: file_id as u64,
+            // Modifica: Gestisce dir = -1 come None
+            let original_dir = if file_input.dir == -1 { None } else { Some(file_input.dir) };
+
+            let dir = match original_dir {
+                Some(dir_id) => files::Entity::find_by_id(dir_id)
+                    .filter(files::Column::Type.eq(true))
+                    .one(&db.clone())
+                    .await
+                    .unwrap(),
+                None => None,
             };
 
-            task_queue.add_task(upload_task).await.unwrap();
-            //Returns uuid of the task. Can be used to query and check if the file has been correctly
-            Ok(Json(NetworkResponse::Ok(String::from(task_uuid))))
-        }
+            println!("{:#?}", dir);
+            let valid_dir = match dir {
+                Some(d) => true, // La directory esiste ed è valida
+                None if original_dir.is_none() => true, // dir era -1 o non specificata, usiamo la root directory
+                None => false, // dir era specificata ma non valida
+            };
+
+            if valid_dir {
+                file_input.file.persist_to(&file_name).await.unwrap();
+                let file_opened = Path::new(&file_name);
+                let file_size = file_opened.metadata().unwrap().len();
+                let file = files::ActiveModel {
+                    id: Default::default(),
+                    filename: Set(file_name.clone()),
+                    r#type: Set(false),
+                    original_size: Set(file_size as i32),
+                    user: Set(c.subject_id),
+                    upload_time: Default::default(),
+                    last_download: Set(None),
+                    locally_stored: Set(None),
+                    parent_dir: Set(original_dir.map(|dir| dir as i32)), // Converte Some(-1) o qualsiasi Some(dir_id) in Some(dir_id as i32), None rimane None
+                };
+                let res: InsertResult<files::ActiveModel> =
+                    files::Entity::insert(file).exec(db).await.unwrap();
+                let file_id = res.last_insert_id;
+                let task_uuid = Uuid::new_v4();
+                let upload_task = task_queue::TaskType::Upload {
+                    id: task_uuid,
+                    file_path: file_name.clone(),
+                    user_id: c.subject_id as u64,
+                    file_name: file_name,
+                    file_id: file_id as u64,
+                };
+
+                task_queue.add_task(upload_task).await.unwrap();
+                Ok(Json(NetworkResponse::Ok(task_uuid.to_string())))
+            } else {
+                Err(Json(NetworkResponse::NotFound("Invalid folder".to_string())))
+            }
+        },
         Err(err_response) => Err(err_response),
     };
 
     response
 }
 
-#[get("/listAll")]
+
+#[get("/listAllFiles")]
 async fn list_all(
     conn: Connection<'_, Db>,
     key: Result<JWT, NetworkResponse>,
@@ -306,6 +330,26 @@ pub async fn get_status_handler(
     //completed but upload: just status
 }
 
+#[get("/me")]
+async fn get_me_handler(
+    conn: Connection<'_, Db>,
+    key: Result<JWT, NetworkResponse>,
+) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
+    let key = match key {
+        Ok(JWT { claims: c }) => Ok(c),
+        _ => Err(Json(NetworkResponse::Unauthorized(
+            "Requested unauthorized".to_string(),
+        ))),
+    };
+    let response = match key {
+        Ok(c) => {
+            let sub_r = json!(c).to_string();
+            Ok(Json(NetworkResponse::Ok(sub_r)))
+        }
+        Err(e) => Err(e),
+    };
+    response
+}
 async fn run_migrations(rocket: Rocket<Build>) -> fairing::Result {
     let conn = &Db::fetch(&rocket).unwrap().conn;
     let _ = migration::Migrator::up(conn, None).await;
@@ -344,16 +388,20 @@ async fn start() -> Result<(), rocket::Error> {
     let allowed_origins = AllowedOrigins::all();
     let cors = CorsOptions {
         allowed_origins,
-        allowed_methods: vec![rocket::http::Method::Get, rocket::http::Method::Post].into_iter().map(From::from).collect(),
+        allowed_methods: vec![rocket::http::Method::Get, rocket::http::Method::Post]
+            .into_iter()
+            .map(From::from)
+            .collect(),
         allowed_headers: rocket_cors::AllowedHeaders::some(&[
             "Authorization",
             "Accept",
-            "Content-Type"
+            "Content-Type",
         ]),
         allow_credentials: true,
         ..Default::default()
     }
-        .to_cors().expect("CORS configuration failed");
+    .to_cors()
+    .expect("CORS configuration failed");
 
     debug!("Firing up rocket");
     rocket::build()
@@ -368,7 +416,9 @@ async fn start() -> Result<(), rocket::Error> {
                 download_file_handler,
                 list_all,
                 upload_to_telegram_handler,
-                get_status_handler
+                get_status_handler,
+                get_me_handler,
+                new_dir_handler
             ],
         )
         .manage(GlobalState {

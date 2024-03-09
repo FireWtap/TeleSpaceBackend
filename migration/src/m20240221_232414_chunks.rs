@@ -1,4 +1,4 @@
-use crate::m20240221_185739_files::Files;
+use crate::m20240221_185740_files::Files;
 use sea_orm_migration::prelude::*;
 
 #[derive(DeriveMigrationName)]
