@@ -34,11 +34,11 @@ use migration::MigratorTrait;
 use teloxide::Bot;
 use tokio::sync::Mutex;
 
+mod handlers;
 mod jwtauth;
 mod pool;
 mod responses;
 mod utils;
-mod handlers;
 
 use pool::Db;
 
@@ -52,10 +52,12 @@ use entity::task_list::Model;
 pub use entity::*;
 use service::task_queue;
 
+use crate::handlers::dir_handlers::{
+    get_directory_name_handler, get_parent_directory, list_directory, new_dir_handler,
+};
 use service::task_queue::TaskType::Upload;
 use service::task_queue::{TaskQueue, TaskType};
 use service::worker::worker;
-use crate::handlers::dir_handlers::{get_directory_name_handler, list_directory, new_dir_handler};
 
 const DEFAULT_POSTS_PER_PAGE: u64 = 5;
 
@@ -89,9 +91,6 @@ async fn login_user_handler(
     }
 }
 
-
-
-
 #[derive(FromForm)]
 struct UploadFileForm<'f> {
     file: TempFile<'f>,
@@ -118,7 +117,11 @@ async fn upload_to_telegram_handler(
             let file_name = std::env::var("UPLOAD_DIR").unwrap() + file_input.file.name().unwrap();
 
             // Modifica: Gestisce dir = -1 come None
-            let original_dir = if file_input.dir == -1 { None } else { Some(file_input.dir) };
+            let original_dir = if file_input.dir == -1 {
+                None
+            } else {
+                Some(file_input.dir)
+            };
 
             let dir = match original_dir {
                 Some(dir_id) => files::Entity::find_by_id(dir_id)
@@ -131,9 +134,9 @@ async fn upload_to_telegram_handler(
 
             println!("{:#?}", dir);
             let valid_dir = match dir {
-                Some(d) => true, // La directory esiste ed è valida
+                Some(d) => true,                        // La directory esiste ed è valida
                 None if original_dir.is_none() => true, // dir era -1 o non specificata, usiamo la root directory
-                None => false, // dir era specificata ma non valida
+                None => false,                          // dir era specificata ma non valida
             };
 
             if valid_dir {
@@ -166,15 +169,16 @@ async fn upload_to_telegram_handler(
                 task_queue.add_task(upload_task).await.unwrap();
                 Ok(Json(NetworkResponse::Ok(task_uuid.to_string())))
             } else {
-                Err(Json(NetworkResponse::NotFound("Invalid folder".to_string())))
+                Err(Json(NetworkResponse::NotFound(
+                    "Invalid folder".to_string(),
+                )))
             }
-        },
+        }
         Err(err_response) => Err(err_response),
     };
 
     response
 }
-
 
 #[get("/listAllFiles")]
 async fn list_all(
@@ -386,10 +390,14 @@ async fn start() -> Result<(), rocket::Error> {
     let allowed_origins = AllowedOrigins::all();
     let cors = CorsOptions {
         allowed_origins,
-        allowed_methods: vec![rocket::http::Method::Get, rocket::http::Method::Post, Method::Delete]
-            .into_iter()
-            .map(From::from)
-            .collect(),
+        allowed_methods: vec![
+            rocket::http::Method::Get,
+            rocket::http::Method::Post,
+            Method::Delete,
+        ]
+        .into_iter()
+        .map(From::from)
+        .collect(),
         allowed_headers: rocket_cors::AllowedHeaders::some(&[
             "Authorization",
             "Accept",
@@ -418,7 +426,8 @@ async fn start() -> Result<(), rocket::Error> {
                 get_me_handler,
                 new_dir_handler,
                 list_directory,
-                get_directory_name_handler
+                get_directory_name_handler,
+                get_parent_directory
             ],
         )
         .manage(GlobalState {
