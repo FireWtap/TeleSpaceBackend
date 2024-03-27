@@ -238,3 +238,36 @@ pub async fn get_parent_directory(
     };
     response
 }
+
+#[delete("/deleteDirectory/<id>")]
+pub async fn delete_directory_handler(
+    conn: Connection<'_, Db>,
+    id: i32,
+    key: Result<JWT, NetworkResponse>,
+) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
+    let key = match key {
+        Ok(JWT { claims: c }) => Ok(c),
+        _ => Err(Json(NetworkResponse::Unauthorized(
+            "Requested unauthorized".to_string(),
+        ))),
+    };
+    let response = match key {
+        Ok(c) => {
+            let db = conn.into_inner();
+            if (check_dir_exists(&db, &id)).await {
+                Files::delete_by_id(id)
+                    .filter(files::Column::User.eq(c.subject_id))
+                    .exec(db)
+                    .await
+                    .unwrap();
+                Ok(Json(NetworkResponse::Ok("Directory deleted".to_string())))
+            } else {
+                Err(Json(NetworkResponse::NotFound(String::from(
+                    "Directory doesn't exists",
+                ))))
+            }
+        }
+        Err(e) => Err(e),
+    };
+    response
+}

@@ -35,7 +35,9 @@ impl MigrationTrait for Migration {
                             .from_tbl(Chunks::Table)
                             .from_col(Chunks::File)
                             .to_tbl(Files::Table)
-                            .to_col(Files::Id),
+                            .to_col(Files::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),
             )

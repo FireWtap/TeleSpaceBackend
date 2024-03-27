@@ -39,14 +39,18 @@ impl MigrationTrait for Migration {
                             .from_tbl(Files::Table)
                             .from_col(Files::User)
                             .to_tbl(Users::Table)
-                            .to_col(Users::Id),
+                            .to_col(Users::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
                     )
                     .foreign_key(
                         ForeignKeyCreateStatement::new()
                             .from_tbl(Files::Table)
                             .from_col(Files::ParentDir)
                             .to_tbl(Files::Table)
-                            .to_col(Files::Id),
+                            .to_col(Files::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),
             )

@@ -1,2 +1,2 @@
 pub mod dir_handlers;
-pub mod file_handler;
+pub mod file_handlers;

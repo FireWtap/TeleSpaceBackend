@@ -48,13 +48,15 @@ use crate::responses::NetworkResponse;
 
 use entity::prelude::{Files, TaskList, Users};
 
+use crate::handlers::dir_handlers::{
+    delete_directory_handler, get_directory_name_handler, get_parent_directory, list_directory,
+    new_dir_handler,
+};
+use crate::handlers::file_handlers::delete_file_handler;
+use crate::handlers::file_handlers::locally_stored_download_handler;
 use entity::task_list::Model;
 pub use entity::*;
 use service::task_queue;
-
-use crate::handlers::dir_handlers::{
-    get_directory_name_handler, get_parent_directory, list_directory, new_dir_handler,
-};
 use service::task_queue::TaskType::Upload;
 use service::task_queue::{TaskQueue, TaskType};
 use service::worker::worker;
@@ -95,6 +97,7 @@ async fn login_user_handler(
 struct UploadFileForm<'f> {
     file: TempFile<'f>,
     dir: i32,
+    filename: String, //Needed because rocket deletes the extention of the file in TempFile
 }
 #[post("/uploadFile", data = "<file_input>")]
 async fn upload_to_telegram_handler(
@@ -114,7 +117,7 @@ async fn upload_to_telegram_handler(
         Ok(c) => {
             let task_queue = &state.queue;
             let db = conn.into_inner();
-            let file_name = std::env::var("UPLOAD_DIR").unwrap() + file_input.file.name().unwrap();
+            let file_name = std::env::var("UPLOAD_DIR").unwrap() + file_input.filename.as_str();
 
             // Modifica: Gestisce dir = -1 come None
             let original_dir = if file_input.dir == -1 {
@@ -427,7 +430,10 @@ async fn start() -> Result<(), rocket::Error> {
                 new_dir_handler,
                 list_directory,
                 get_directory_name_handler,
-                get_parent_directory
+                get_parent_directory,
+                delete_directory_handler,
+                delete_file_handler,
+                locally_stored_download_handler
             ],
         )
         .manage(GlobalState {

@@ -35,7 +35,7 @@ rust_file_splitting_utils = { git = "https://github.com/FireWtap/RustFileSplitte
 unescape = "0.1.0"
 tracing = "0.1.40"
 rocket_cors = "0.6.0"
-
+rocket-download-response = "0.5.4"
 
 [dependencies.sea-orm-rocket]
 version = "0.5"
