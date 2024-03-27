@@ -1,3 +1,10 @@
 /target
 /prove*
 /migration/target
+.DS_Store
+Cargo.lock
+.idea/vcs.xml
+.idea/thesplitter.iml
+.idea/modules.xml
+.idea/dataSources.xml
+db.sqlite

@@ -2,7 +2,6 @@ use crate::jwtauth::jwt::{Claims, JWT};
 use crate::pool::Db;
 use crate::responses::NetworkResponse;
 use entity::files;
-use entity::files::Model;
 use entity::prelude::Files;
 use rocket::form::Form;
 use rocket::serde::json::Json;
@@ -41,7 +40,7 @@ pub async fn check_dir_exists(db: &DatabaseConnection, dir_id: &i32) -> bool {
 }
 
 #[derive(FromForm)]
-struct NewDirForm {
+pub struct NewDirForm {
     name: String,
     parent: i32,
 }
