@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use crate::jwtauth;
 use crate::jwtauth::jwt::{Claims, JWT};
 use crate::pool::Db;
 use crate::responses::NetworkResponse;
@@ -112,68 +113,121 @@ pub async fn rename_file_handler(
     };
     response
 }
-#[get("/downloadLocalFile/<file_id>")]
+#[get("/downloadLocalFile/<token>/<file_id>")]
 pub async fn locally_stored_download_handler(
     conn: Connection<'_, Db>,
     file_id: i32,
-    key: Result<JWT, NetworkResponse>,
+    token: String,
 ) -> Result<DownloadResponse, Json<NetworkResponse>> {
     // First, handle the key validation and extract claims if valid.
-    let claims = match key {
-        Ok(JWT { claims: c }) => c,
-        Err(_) => {
-            return Err(Json(NetworkResponse::Unauthorized(
-                "Requested unauthorized".to_string(),
-            )))
-        }
+    let claims = jwtauth::jwt::decode_jwt(token);
+    let key = match claims {
+        Ok(c) => Ok(c),
+        Err(e) => Err(Json(NetworkResponse::Unauthorized(
+            "Not authorized".to_string(),
+        ))),
     };
+    let response = match key {
+        Ok(c) => {
+            let db = conn.into_inner();
+            let uid = c.subject_id;
 
-    let db = conn.into_inner();
-    let uid = claims.subject_id;
+            // Check if the file is valid for the given user.
+            let valid = valid_file(&db, &file_id, &uid).await;
+            if !valid {
+                return Err(Json(NetworkResponse::NotFound(
+                    "File ID not found".to_string(),
+                )));
+            }
 
-    // Check if the file is valid for the given user.
-    let valid = valid_file(&db, &file_id, &uid).await;
-    if !valid {
-        return Err(Json(NetworkResponse::NotFound(
-            "File ID not found".to_string(),
-        )));
-    }
+            // Attempt to retrieve the file from the database.
+            match files::Entity::find_by_id(file_id).one(db).await {
+                Ok(Some(file)) if file.locally_stored.unwrap_or(false) => {
+                    let filename = file.filename.clone();
+                    let file_path = Path::new(&filename);
 
-    // Attempt to retrieve the file from the database.
-    match files::Entity::find_by_id(file_id).one(db).await {
-        Ok(Some(file)) if file.locally_stored.unwrap_or(false) => {
-            let filename = file.filename.clone();
-            let file_path = Path::new(&filename);
+                    match DownloadResponse::from_file(
+                        file_path,
+                        Some(filename.replace("./temp/", "")),
+                        None,
+                    )
+                    .await
+                    {
+                        Ok(response) => {
+                            //Let's update the file last download date so that we can run a cron job to delete files that have not been downloaded for a long time
+                            let mut active_file = file.into_active_model();
+                            active_file.last_download = Set(Option::from(
+                                NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)
+                                    .to_string(),
+                            ));
+                            active_file.update(db).await.unwrap();
 
-            match DownloadResponse::from_file(
-                file_path,
-                Some(filename.replace("./temp/", "")),
-                None,
-            )
-            .await
-            {
-                Ok(response) => {
-                    //Let's update the file last download date so that we can run a cron job to delete files that have not been downloaded for a long time
-                    let mut active_file = file.into_active_model();
-                    active_file.last_download = Set(Option::from(
-                        NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0).to_string(),
-                    ));
-                    active_file.update(db).await.unwrap();
-
-                    Ok(response)
+                            Ok(response)
+                        }
+                        Err(err) => Err(Json(NetworkResponse::BadRequest(format!(
+                            "Error downloading file: {}",
+                            err
+                        )))),
+                    }
                 }
-                Err(err) => Err(Json(NetworkResponse::BadRequest(format!(
-                    "Error downloading file: {}",
-                    err
-                )))),
+                Ok(Some(_)) => Err(Json(NetworkResponse::BadRequest(
+                    "File not available for download".to_string(),
+                ))),
+                Ok(None) => Err(Json(NetworkResponse::NotFound(
+                    "File not found".to_string(),
+                ))),
+                Err(err) => Err(Json(NetworkResponse::BadRequest(err.to_string()))),
             }
         }
-        Ok(Some(_)) => Err(Json(NetworkResponse::BadRequest(
-            "File not available for download".to_string(),
+        Err(e) => Err(e),
+    };
+    response
+}
+
+
+#[get("/info/<file_id>")]
+pub async fn file_info_handler(
+    conn: Connection<'_, Db>,
+    file_id: i32,
+    key: Result<JWT, NetworkResponse>,
+) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
+    let key = match key {
+        Ok(JWT { claims: c }) => Ok(c),
+        _ => Err(Json(NetworkResponse::Unauthorized(
+            "Requested unauthorized".to_string(),
         ))),
-        Ok(None) => Err(Json(NetworkResponse::NotFound(
-            "File not found".to_string(),
-        ))),
-        Err(err) => Err(Json(NetworkResponse::BadRequest(err.to_string()))),
-    }
+    };
+
+    let response = match key {
+        Ok(c) => {
+            let db = conn.into_inner();
+            let uid = c.subject_id;
+
+            let valid = valid_file(&db, &file_id, &uid).await;
+            if valid {
+                match files::Entity::find_by_id(file_id).one(db).await {
+                    Ok(Some(file)) => {
+                        let file_info = json!({
+                            "filename": file.filename,
+                            "size": file.original_size,
+                            "locally_stored": file.locally_stored,
+                            "last_download":file.last_download,
+                            "type": file.r#type,
+                        });
+                        Ok(Json(NetworkResponse::Ok(file_info.to_string())))
+                    }
+                    Ok(None) => Err(Json(NetworkResponse::NotFound(
+                        "File not found".to_string(),
+                    ))),
+                    Err(err) => Err(Json(NetworkResponse::BadRequest(err.to_string()))),
+                }
+            } else {
+                Err(Json(NetworkResponse::NotFound(
+                    "File ID not found".to_string(),
+                )))
+            }
+        }
+        Err(e) => Err(e),
+    };
+    response
 }

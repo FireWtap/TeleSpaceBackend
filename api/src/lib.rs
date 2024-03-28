@@ -54,14 +54,13 @@ use crate::handlers::dir_handlers::{
 };
 use crate::handlers::file_handlers::delete_file_handler;
 use crate::handlers::file_handlers::locally_stored_download_handler;
+use crate::handlers::file_handlers::file_info_handler;
 use entity::task_list::Model;
 pub use entity::*;
 use service::task_queue;
 use service::task_queue::TaskType::Upload;
 use service::task_queue::{TaskQueue, TaskType};
 use service::worker::worker;
-
-const DEFAULT_POSTS_PER_PAGE: u64 = 5;
 
 #[get("/")]
 async fn root(conn: Connection<'_, Db>) -> content::RawJson<String> {
@@ -433,7 +432,8 @@ async fn start() -> Result<(), rocket::Error> {
                 get_parent_directory,
                 delete_directory_handler,
                 delete_file_handler,
-                locally_stored_download_handler
+                locally_stored_download_handler,
+                file_info_handler
             ],
         )
         .manage(GlobalState {

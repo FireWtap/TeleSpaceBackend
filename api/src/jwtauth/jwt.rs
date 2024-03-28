@@ -19,7 +19,7 @@ use std::env;
 pub struct Claims {
     pub subject_id: i32,
     pub email: String,
-    exp: usize,
+    pub exp: usize,
 }
 
 #[derive(Debug)]
