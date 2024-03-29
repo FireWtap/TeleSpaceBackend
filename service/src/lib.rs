@@ -99,10 +99,6 @@ pub async fn downloader(db: &DatabaseConnection, bot: &Bot, db_file_id: u64, uui
     //Initialize the vec containing all the chunks to be merged
     let mut chunk_path_list: Vec<String> = vec![];
     for i in chunks.iter() {
-        if (i.order % 10 == 0) {
-            //wait for 10 seconds after uploading 15 file to avoid rate limiting
-            time::sleep(Duration::from_secs(10)).await;
-        }
         let x = GetFile {
             file_id: i.telegram_file_id.clone(),
         };

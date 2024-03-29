@@ -51,6 +51,9 @@ use crate::handlers::dir_handlers::{
 use crate::handlers::file_handlers::{
     clear_cache_handler, delete_file_handler, file_info_handler, locally_stored_download_handler,
 };
+
+use crate::handlers::task_handlers::get_all_tasks;
+
 pub use entity::*;
 use service::task_queue;
 use service::task_queue::{TaskQueue, TaskType};
@@ -436,7 +439,8 @@ async fn start() -> Result<(), rocket::Error> {
                 delete_file_handler,
                 locally_stored_download_handler,
                 file_info_handler,
-                clear_cache_handler
+                clear_cache_handler,
+                get_all_tasks
             ],
         )
         .manage(GlobalState {

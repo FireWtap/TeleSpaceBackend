@@ -6,18 +6,14 @@ use crate::pool::Db;
 use crate::responses::NetworkResponse;
 use chrono::{NaiveDateTime, Utc};
 use entity::files;
-use entity::prelude::Files;
 use rocket::form::Form;
 use rocket::serde::json::Json;
 use rocket_download_response::DownloadResponse;
 use sea_orm::ActiveValue::Set;
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ModelTrait, QueryOrder,
-};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait};
 use sea_orm::{IntoActiveModel, QueryFilter};
 use sea_orm_rocket::Connection;
 use serde_json::json;
-use tokio::fs;
 
 pub async fn valid_file(db: &DatabaseConnection, file_id: &i32, user_id: &i32) -> bool {
     let exists = files::Entity::find()
@@ -50,12 +46,13 @@ pub async fn delete_file_handler(
 
             let valid = valid_file(&db, &file_id, &uid).await;
             if valid {
+                clear_cache(db, file_id, uid).await;
+
                 files::Entity::delete_by_id(*&file_id)
                     .filter(files::Column::Id.eq(file_id))
                     .exec(db)
                     .await
                     .unwrap();
-                clear_cache(db, file_id, uid).await;
                 Ok(Json(NetworkResponse::Ok("File deleted".to_string())))
             } else {
                 Err(Json(NetworkResponse::NotFound(
