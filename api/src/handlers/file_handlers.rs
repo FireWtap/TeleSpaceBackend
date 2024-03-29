@@ -17,6 +17,7 @@ use sea_orm::{
 use sea_orm::{IntoActiveModel, QueryFilter};
 use sea_orm_rocket::Connection;
 use serde_json::json;
+use tokio::fs;
 
 pub async fn valid_file(db: &DatabaseConnection, file_id: &i32, user_id: &i32) -> bool {
     let exists = files::Entity::find()
@@ -54,6 +55,7 @@ pub async fn delete_file_handler(
                     .exec(db)
                     .await
                     .unwrap();
+                clear_cache(db, file_id, uid).await;
                 Ok(Json(NetworkResponse::Ok("File deleted".to_string())))
             } else {
                 Err(Json(NetworkResponse::NotFound(
@@ -184,7 +186,6 @@ pub async fn locally_stored_download_handler(
     response
 }
 
-
 #[get("/info/<file_id>")]
 pub async fn file_info_handler(
     conn: Connection<'_, Db>,
@@ -220,6 +221,69 @@ pub async fn file_info_handler(
                         "File not found".to_string(),
                     ))),
                     Err(err) => Err(Json(NetworkResponse::BadRequest(err.to_string()))),
+                }
+            } else {
+                Err(Json(NetworkResponse::NotFound(
+                    "File ID not found".to_string(),
+                )))
+            }
+        }
+        Err(e) => Err(e),
+    };
+    response
+}
+
+// if file is locally avaialble, provide a clear cache to delete the file from the server, first with a simple method, then with a proper route
+pub async fn clear_cache(db: &DatabaseConnection, file_id: i32, user_id: i32) -> bool {
+    let file = files::Entity::find_by_id(file_id)
+        .one(db)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let filename = file.filename.clone();
+    let locally_available = file.locally_stored.unwrap_or(false);
+
+    if (!locally_available) {
+        return false;
+    }
+    let file_path = Path::new(&filename);
+
+    tokio::fs::remove_file(file_path).await.unwrap();
+    //Update the file to reflect that it is no longer locally stored
+    let mut active_file = file.into_active_model();
+    active_file.locally_stored = Set(Option::from(false));
+    active_file.update(db).await.unwrap();
+    return true;
+}
+
+#[get("/clearCache/<file_id>")]
+pub async fn clear_cache_handler(
+    conn: Connection<'_, Db>,
+    file_id: i32,
+    key: Result<JWT, NetworkResponse>,
+) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
+    let key = match key {
+        Ok(JWT { claims: c }) => Ok(c),
+        _ => Err(Json(NetworkResponse::Unauthorized(
+            "Requested unauthorized".to_string(),
+        ))),
+    };
+
+    let response = match key {
+        Ok(c) => {
+            let db = conn.into_inner();
+            let uid = c.subject_id;
+
+            let valid = valid_file(&db, &file_id, &uid).await;
+            if valid {
+                let cleared = clear_cache(&db, file_id, uid).await;
+                if cleared {
+                    Ok(Json(NetworkResponse::Ok("Cache cleared".to_string())))
+                } else {
+                    Err(Json(NetworkResponse::BadRequest(
+                        "File not locally stored".to_string(),
+                    )))
                 }
             } else {
                 Err(Json(NetworkResponse::NotFound(

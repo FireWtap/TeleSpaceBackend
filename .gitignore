@@ -8,3 +8,4 @@ Cargo.lock
 .idea/modules.xml
 .idea/dataSources.xml
 db.sqlite
+temp/*.*

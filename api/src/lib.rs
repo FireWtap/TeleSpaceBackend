@@ -2,7 +2,6 @@
 extern crate rocket;
 
 use dotenvy::dotenv;
-use std::env;
 
 use rocket::fairing::{self, AdHoc};
 use rocket::form::Form;
@@ -12,15 +11,12 @@ use rocket::response::content;
 use rocket::serde::json::{json, Json};
 
 use rocket::http::Method;
-use rocket::yansi::Paint;
 use rocket::{Build, Rocket, State};
-use rocket_cors::{AllowedHeaders, AllowedOrigins, CorsOptions};
+use rocket_cors::{AllowedOrigins, CorsOptions};
 use sea_orm::ActiveValue::Set;
 use sea_orm::{
-    ColumnTrait, Condition, DatabaseConnection, EntityTrait, InsertResult, JoinType, QueryFilter,
-    QueryOrder, QuerySelect, Related,
+    ColumnTrait, DatabaseConnection, EntityTrait, InsertResult, QueryFilter, QueryOrder,
 };
-use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -46,24 +42,22 @@ use crate::jwtauth::jwt::JWT;
 
 use crate::responses::NetworkResponse;
 
-use entity::prelude::{Files, TaskList, Users};
+use entity::prelude::{Files, TaskList};
 
 use crate::handlers::dir_handlers::{
     delete_directory_handler, get_directory_name_handler, get_parent_directory, list_directory,
     new_dir_handler,
 };
-use crate::handlers::file_handlers::delete_file_handler;
-use crate::handlers::file_handlers::locally_stored_download_handler;
-use crate::handlers::file_handlers::file_info_handler;
-use entity::task_list::Model;
+use crate::handlers::file_handlers::{
+    clear_cache_handler, delete_file_handler, file_info_handler, locally_stored_download_handler,
+};
 pub use entity::*;
 use service::task_queue;
-use service::task_queue::TaskType::Upload;
 use service::task_queue::{TaskQueue, TaskType};
 use service::worker::worker;
 
 #[get("/")]
-async fn root(conn: Connection<'_, Db>) -> content::RawJson<String> {
+async fn root() -> content::RawJson<String> {
     content::RawJson(format!("users:'{:?}'", "testing stuff"))
 }
 
@@ -143,6 +137,14 @@ async fn upload_to_telegram_handler(
 
             if valid_dir {
                 file_input.file.persist_to(&file_name).await.unwrap();
+                /*let x =
+                match tokio::fs::copy(&file_input.file.path().unwrap(), &file_name ).await{
+                    Ok(_) => tokio::fs::remove_file(&file_input.file.path().unwrap()).await,
+                    Err(e) => {
+                        Err(std::io::Error::new(std::io::ErrorKind::Other, "Error"))
+                    }
+                };*/
+
                 let file_opened = Path::new(&file_name);
                 let file_size = file_opened.metadata().unwrap().len();
                 let file = files::ActiveModel {
@@ -433,7 +435,8 @@ async fn start() -> Result<(), rocket::Error> {
                 delete_directory_handler,
                 delete_file_handler,
                 locally_stored_download_handler,
-                file_info_handler
+                file_info_handler,
+                clear_cache_handler
             ],
         )
         .manage(GlobalState {
