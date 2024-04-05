@@ -41,22 +41,16 @@ pub async fn get_all_tasks(
                 .column(task_list::Column::AddTime)
                 .column(task_list::Column::CompletionTime)
                 .column(task_list::Column::Type)
-                .join_as(
-                    JoinType::InnerJoin,
-                    task_list::Entity::belongs_to(files::Entity)
-                        .from(task_list::Column::File)
-                        .to(files::Column::Id)
-                        .into(),
-                    Alias::new("files"),
-                )
                 .filter(files::Column::User.eq(c.subject_id))
+                .find_also_related(files::Entity)
                 .all(*db)
                 .await
                 .unwrap();
+
             //Build a json from vec
             let json_tasks: Vec<serde_json::Value> = tasks
                 .into_iter()
-                .map(|task| {
+                .map(|(task, file)| {
                     json!({
                         "id": task.id,
                         "name": task.file,
@@ -64,6 +58,7 @@ pub async fn get_all_tasks(
                         "add_time": task.add_time,
                         "completion_time": task.completion_time,
                         "type": task.r#type,
+                        "filename": file.unwrap().filename.replace("./temp/", ""),
                     })
                 })
                 .collect();

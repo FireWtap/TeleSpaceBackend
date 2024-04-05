@@ -136,6 +136,7 @@ pub async fn list_directory(
             if (original_parent.is_none()) {
                 //list root dir
                 let list_root = files::Entity::find()
+                    .filter(files::Column::User.eq(c.subject_id))
                     .filter(files::Column::ParentDir.is_null())
                     .order_by_desc(files::Column::Type)
                     .all(db)

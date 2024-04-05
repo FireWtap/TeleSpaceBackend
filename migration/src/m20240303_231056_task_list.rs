@@ -38,7 +38,7 @@ impl MigrationTrait for Migration {
                             .from_col(TaskList::File)
                             .to_tbl(Files::Table)
                             .to_col(Files::Id)
-                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),

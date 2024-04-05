@@ -9,6 +9,7 @@ url="sqlite://db.sqlite?mode=rwc"
 [default]
 temp_dir = "temp/temp"
 [debug]
+address = "0.0.0.0"
 temp_dir = "temp/temp"
 [release]
 address = "192.168.1.58"

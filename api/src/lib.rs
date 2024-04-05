@@ -204,6 +204,7 @@ async fn list_all(
             let _user_id = c.subject_id;
             let db = conn.into_inner();
             let query_all = Files::find()
+                .filter(files::Column::User.eq(c.subject_id as i32))
                 .order_by_asc(files::Column::Type)
                 .order_by_asc(files::Column::Filename)
                 .all(db)

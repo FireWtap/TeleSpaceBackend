@@ -23,7 +23,7 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(Files::Filename).string().not_null())
                     .col(ColumnDef::new(Files::Type).boolean().not_null())
-                    .col(ColumnDef::new(Files::OriginalSize).integer().not_null())
+                    .col(ColumnDef::new(Files::OriginalSize).big_integer().not_null())
                     .col(ColumnDef::new(Files::User).integer().not_null())
                     .col(
                         ColumnDef::new(Files::UploadTime)
