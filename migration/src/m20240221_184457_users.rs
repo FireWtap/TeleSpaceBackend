@@ -27,6 +27,7 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(ColumnDef::new(Users::PasswordHash).string().not_null())
+                    .col(ColumnDef::new(Users::BotToken).string().not_null())
                     .to_owned(),
             )
             .await
@@ -47,4 +48,5 @@ pub enum Users {
     Id,
     Email,
     PasswordHash,
+    BotToken,
 }

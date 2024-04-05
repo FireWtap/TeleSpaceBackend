@@ -53,7 +53,7 @@ use crate::handlers::file_handlers::{
 };
 
 use crate::handlers::task_handlers::get_all_tasks;
-
+use crate::handlers::user_handlers::{check_bottoken_validity, get_me_handler};
 pub use entity::*;
 use service::task_queue;
 use service::task_queue::{TaskQueue, TaskType};
@@ -154,7 +154,7 @@ async fn upload_to_telegram_handler(
                     id: Default::default(),
                     filename: Set(file_name.clone()),
                     r#type: Set(false),
-                    original_size: Set(file_size as i32),
+                    original_size: Set(file_size as i64),
                     user: Set(c.subject_id),
                     upload_time: Default::default(),
                     last_download: Set(None),
@@ -184,36 +184,6 @@ async fn upload_to_telegram_handler(
         Err(err_response) => Err(err_response),
     };
 
-    response
-}
-
-#[get("/listAllFiles")]
-async fn list_all(
-    conn: Connection<'_, Db>,
-    key: Result<JWT, NetworkResponse>,
-) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
-    let key = match key {
-        Ok(JWT { claims: c }) => Ok(c),
-        _ => Err(Json(NetworkResponse::Unauthorized(
-            "Requested unauthorized".to_string(),
-        ))),
-    };
-
-    let response = match key {
-        Ok(c) => {
-            let _user_id = c.subject_id;
-            let db = conn.into_inner();
-            let query_all = Files::find()
-                .filter(files::Column::User.eq(c.subject_id as i32))
-                .order_by_asc(files::Column::Type)
-                .order_by_asc(files::Column::Filename)
-                .all(db)
-                .await
-                .unwrap();
-            Ok(Json(NetworkResponse::Ok(json!(query_all).to_string())))
-        }
-        Err(e) => Err(e),
-    };
     response
 }
 
@@ -341,25 +311,6 @@ pub async fn get_status_handler(
     //completed but upload: just status
 }
 
-#[get("/me")]
-async fn get_me_handler(
-    key: Result<JWT, NetworkResponse>,
-) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
-    let key = match key {
-        Ok(JWT { claims: c }) => Ok(c),
-        _ => Err(Json(NetworkResponse::Unauthorized(
-            "Requested unauthorized".to_string(),
-        ))),
-    };
-    let response = match key {
-        Ok(c) => {
-            let sub_r = json!(c).to_string();
-            Ok(Json(NetworkResponse::Ok(sub_r)))
-        }
-        Err(e) => Err(e),
-    };
-    response
-}
 async fn run_migrations(rocket: Rocket<Build>) -> fairing::Result {
     let conn = &Db::fetch(&rocket).unwrap().conn;
     let _ = migration::Migrator::up(conn, None).await;
@@ -428,7 +379,6 @@ async fn start() -> Result<(), rocket::Error> {
                 root,
                 login_user_handler,
                 download_file_handler,
-                list_all,
                 upload_to_telegram_handler,
                 get_status_handler,
                 get_me_handler,
@@ -441,7 +391,8 @@ async fn start() -> Result<(), rocket::Error> {
                 locally_stored_download_handler,
                 file_info_handler,
                 clear_cache_handler,
-                get_all_tasks
+                get_all_tasks,
+                check_bottoken_validity
             ],
         )
         .manage(GlobalState {

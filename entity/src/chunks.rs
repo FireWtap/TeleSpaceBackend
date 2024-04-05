@@ -19,8 +19,8 @@ pub enum Relation {
         belongs_to = "super::files::Entity",
         from = "Column::File",
         to = "super::files::Column::Id",
-        on_update = "NoAction",
-        on_delete = "NoAction"
+        on_update = "Cascade",
+        on_delete = "Cascade"
     )]
     Files,
 }

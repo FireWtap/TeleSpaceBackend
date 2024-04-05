@@ -142,7 +142,21 @@ pub async fn list_directory(
                     .all(db)
                     .await
                     .unwrap();
-                Ok(Json(NetworkResponse::Ok(json!(list_root).to_string())))
+                let directory_list = list_root
+                    .into_iter()
+                    .map(|item| {
+                        serde_json::json!({
+                            "id": item.id,
+                            "filename": item.filename,
+                            "type": item.r#type,
+                            "user": item.user,
+                            "parent_dir": item.parent_dir,
+                            "upload_time": item.upload_time,
+                        })
+                    })
+                    .collect::<Vec<_>>();
+
+                Ok(Json(NetworkResponse::Ok(json!(directory_list).to_string())))
             } else if (check_dir_exists(&db, &id).await) {
                 //list all in that directory
                 /*let dir_list = files::Entity::find_by_id(id)
@@ -156,8 +170,23 @@ pub async fn list_directory(
                     .all(db)
                     .await
                     .unwrap();
+                let directory_list = childrens
+                    .into_iter()
+                    .map(|item| {
+                        serde_json::json!({
+                            "id": item.id,
+                            "filename": item.filename,
+                            "type": item.r#type,
+                            "user": item.user,
+                            "parent_dir": item.parent_dir,
+                            "upload_time": item.upload_time,
+                        "original_size": item.original_size,
+                        })
+                    })
+                    .collect::<Vec<_>>();
+
                 //dir_list.find_related(Files).all(db).await.unwrap();
-                Ok(Json(NetworkResponse::Ok(json!(childrens).to_string())))
+                Ok(Json(NetworkResponse::Ok(json!(directory_list).to_string())))
             } else {
                 Err(Json(NetworkResponse::NotFound(String::from(
                     "Directory not found",
