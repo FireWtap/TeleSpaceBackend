@@ -28,6 +28,7 @@ use tokio::time::{self, sleep, Duration};
 pub async fn uploader(
     db: &DatabaseConnection,
     bot: &Bot,
+    user_chat_id: i64,
     path: String,
     uuid: Uuid,
     file_id: i32,
@@ -47,7 +48,7 @@ pub async fn uploader(
         while !success {
             let result = bot
                 .send_document(
-                    Recipient::Id(ChatId(1069912693)),
+                    Recipient::Id(ChatId(user_chat_id)), //hard coded. let's fix this
                     InputFile::file(PathBuf::from(e)),
                 )
                 .send()

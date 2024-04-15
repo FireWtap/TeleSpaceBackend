@@ -21,7 +21,7 @@ pub enum Relation {
         from = "Column::File",
         to = "super::files::Column::Id",
         on_update = "Cascade",
-        on_delete = "Restrict"
+        on_delete = "Cascade"
     )]
     Files,
 }

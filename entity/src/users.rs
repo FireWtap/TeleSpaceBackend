@@ -11,6 +11,7 @@ pub struct Model {
     pub email: String,
     pub password_hash: String,
     pub bot_token: String,
+    pub user_telegram_id: i64,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

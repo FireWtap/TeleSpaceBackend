@@ -18,6 +18,7 @@ use sea_orm::{IntoActiveModel, QueryFilter};
 use sea_orm_rocket::Connection;
 use serde_json::json;
 use teloxide::requests::Requester;
+use teloxide::types::ChatId;
 use teloxide::Bot;
 
 #[get("/me")]
@@ -109,7 +110,9 @@ pub async fn update_token_bot_handler(
             let mut user_active = user.into_active_model();
             user_active.bot_token = Set(form.bot_token.clone()); //Change token
             let updated_user = user_active.update(db).await.unwrap(); //Persist update
-
+                                                                      // let's send a new message to the user
+            let bot = Bot::new(&form.bot_token);
+            bot.send_message(ChatId(updated_user.user_telegram_id.clone()), "Hey! you successfully connected your bot to TeleSpace🚀.\nKeep in mind we can't assure all your data are safe now, for the moment at least").await;
             Ok(Json(NetworkResponse::Ok("Bot token updated".to_string())))
         }
         Err(e) => Err(e),

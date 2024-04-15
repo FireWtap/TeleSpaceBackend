@@ -35,7 +35,15 @@ pub async fn worker(mut rx: UnboundedReceiver<TaskType>, db: Arc<DatabaseConnect
                 new_status.status = Set(String::from("WORKING"));
                 new_status = new_status.update(db.as_ref()).await.unwrap().into();
                 println!("{} {} {} {} {}", id, file_path, user_id, file_name, file_id);
-                let _ = uploader(db.as_ref(), &bot, file_path, id, file_id as i32).await;
+                let _ = uploader(
+                    db.as_ref(),
+                    &bot,
+                    user.user_telegram_id,
+                    file_path,
+                    id,
+                    file_id as i32,
+                )
+                .await;
                 new_status.status = Set(String::from("COMPLETED"));
                 new_status.completion_time = Set(Option::from(
                     NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0).to_string(),

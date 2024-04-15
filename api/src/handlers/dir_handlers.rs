@@ -152,6 +152,8 @@ pub async fn list_directory(
                             "user": item.user,
                             "parent_dir": item.parent_dir,
                             "upload_time": item.upload_time,
+                            "original_size": item.original_size,
+                            "locally_stored": item.locally_stored,
                         })
                     })
                     .collect::<Vec<_>>();
@@ -180,7 +182,8 @@ pub async fn list_directory(
                             "user": item.user,
                             "parent_dir": item.parent_dir,
                             "upload_time": item.upload_time,
-                        "original_size": item.original_size,
+                            "original_size": item.original_size,
+                            "locally_stored": item.locally_stored,
                         })
                     })
                     .collect::<Vec<_>>();

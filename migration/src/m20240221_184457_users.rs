@@ -1,4 +1,4 @@
-use sea_orm_migration::prelude::*;
+use sea_orm_migration::{prelude::*, seaql_migrations::Column};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -28,6 +28,11 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(Users::PasswordHash).string().not_null())
                     .col(ColumnDef::new(Users::BotToken).string().not_null())
+                    .col(
+                        ColumnDef::new(Users::UserTelegramId)
+                            .big_integer()
+                            .not_null(),
+                    )
                     .to_owned(),
             )
             .await
@@ -49,4 +54,5 @@ pub enum Users {
     Email,
     PasswordHash,
     BotToken,
+    UserTelegramId,
 }
