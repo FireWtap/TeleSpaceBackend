@@ -2,16 +2,13 @@ use crate::task_queue::TaskType;
 use crate::{downloader, uploader};
 use chrono::{NaiveDateTime, Utc};
 use entity::task_list;
-use sea_orm::prelude::Uuid;
 use sea_orm::ActiveValue::Set;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait};
-use std::path::PathBuf;
 use std::sync::Arc;
 use teloxide::Bot;
-use tokio::fs;
-use tokio::sync::mpsc::{Receiver, UnboundedReceiver};
+use tokio::sync::mpsc::UnboundedReceiver;
 
-pub async fn worker(mut rx: UnboundedReceiver<TaskType>, db: Arc<DatabaseConnection>, bot: Bot) {
+pub async fn worker(mut rx: UnboundedReceiver<TaskType>, db: Arc<DatabaseConnection>) {
     while let Some(task) = rx.recv().await {
         match task {
             TaskType::Upload {
@@ -21,6 +18,14 @@ pub async fn worker(mut rx: UnboundedReceiver<TaskType>, db: Arc<DatabaseConnect
                 file_name,
                 file_id,
             } => {
+                // We received a task but we're gonna use USER PERSONAL BOT TOKEN TO EXECUTE THE TASK.
+                // fetching the bot token from the database
+                let user = entity::users::Entity::find_by_id(user_id.clone() as i32)
+                    .one(db.as_ref())
+                    .await
+                    .unwrap()
+                    .unwrap();
+                let bot = Bot::new(user.bot_token);
                 let task_from_db = task_list::Entity::find_by_id(id)
                     .one(db.as_ref())
                     .await
@@ -43,6 +48,12 @@ pub async fn worker(mut rx: UnboundedReceiver<TaskType>, db: Arc<DatabaseConnect
                 db_file_id,
                 user_id,
             } => {
+                let user = entity::users::Entity::find_by_id(user_id.clone() as i32)
+                    .one(db.as_ref())
+                    .await
+                    .unwrap()
+                    .unwrap();
+                let bot = Bot::new(user.bot_token);
                 let task_from_db = task_list::Entity::find_by_id(id)
                     .one(db.as_ref())
                     .await

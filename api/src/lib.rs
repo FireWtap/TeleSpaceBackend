@@ -335,19 +335,16 @@ async fn start() -> Result<(), rocket::Error> {
     debug!("Init bot connection...");
     let bot = Bot::from_env();
 
-    let worker_bot = Bot::from_env();
     let worker_connection: DatabaseConnection =
         sea_orm::Database::connect("sqlite://db.sqlite?mode=rwc")
             .await
             .unwrap();
     let worker = tokio::spawn(async move {
-        worker(receiver, Arc::new(worker_connection), worker_bot).await;
+        worker(receiver, Arc::new(worker_connection)).await;
     });
 
     debug!("Setting up CORS...");
-    let allowed_origins = AllowedOrigins::some_exact(&[
-        "http://localhost:5173", // Aggiungi qui altri domini se necessario
-    ]);
+
     let allowed_origins = AllowedOrigins::all();
     let cors = CorsOptions {
         allowed_origins,
