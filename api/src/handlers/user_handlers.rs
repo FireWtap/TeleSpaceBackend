@@ -81,3 +81,38 @@ pub async fn check_bottoken_validity(
     };
     response
 }
+
+#[derive(FromForm)]
+pub struct NewBotToken {
+    bot_token: String,
+}
+#[post("/updateBotToken", data = "<form>")]
+pub async fn update_token_bot_handler(
+    conn: Connection<'_, Db>,
+    key: Result<JWT, NetworkResponse>,
+    form: Form<NewBotToken>,
+) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
+    let key = match key {
+        Ok(JWT { claims: c }) => Ok(c),
+        _ => Err(Json(NetworkResponse::Unauthorized(
+            "Requested unauthorized".to_string(),
+        ))),
+    };
+    let response = match key {
+        Ok(c) => {
+            let db = conn.into_inner();
+            let user: users::Model = users::Entity::find_by_id(c.subject_id)
+                .one(db)
+                .await
+                .unwrap()
+                .unwrap(); //We're sure it exists
+            let mut user_active = user.into_active_model();
+            user_active.bot_token = Set(form.bot_token.clone()); //Change token
+            let updated_user = user_active.update(db).await.unwrap(); //Persist update
+
+            Ok(Json(NetworkResponse::Ok("Bot token updated".to_string())))
+        }
+        Err(e) => Err(e),
+    };
+    response
+}
