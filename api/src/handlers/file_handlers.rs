@@ -96,7 +96,7 @@ pub async fn rename_file_handler(
                     .unwrap();
 
                 //Convert it into an active model
-                let mut active_file = file.unwrap().into_active_model();
+                let mut active_file: files::ActiveModel = file.unwrap().into_active_model();
                 active_file.filename = Set(format!("./temp/{}", new_name.new_name));
                 //Update the filename
                 active_file.update(db).await.unwrap();

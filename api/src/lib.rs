@@ -46,10 +46,11 @@ use entity::prelude::{Files, TaskList};
 
 use crate::handlers::dir_handlers::{
     delete_directory_handler, get_directory_name_handler, get_parent_directory, list_directory,
-    new_dir_handler,
+    new_dir_handler, rename_directory_handler,
 };
 use crate::handlers::file_handlers::{
     clear_cache_handler, delete_file_handler, file_info_handler, locally_stored_download_handler,
+    rename_file_handler,
 };
 
 use crate::handlers::task_handlers::get_all_tasks;
@@ -392,7 +393,9 @@ async fn start() -> Result<(), rocket::Error> {
                 clear_cache_handler,
                 get_all_tasks,
                 check_bottoken_validity,
-                update_token_bot_handler
+                update_token_bot_handler,
+                rename_file_handler,
+                rename_directory_handler
             ],
         )
         .manage(GlobalState {

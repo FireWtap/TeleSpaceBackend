@@ -2,12 +2,15 @@ use crate::jwtauth::jwt::{Claims, JWT};
 use crate::pool::Db;
 use crate::responses::NetworkResponse;
 use entity::files;
+use entity::files::*;
 use entity::prelude::Files;
 use rocket::form::Form;
 use rocket::serde::json::Json;
 use sea_orm::ActiveValue::Set;
-use sea_orm::QueryFilter;
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, ModelTrait, QueryOrder};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ModelTrait, QueryOrder,
+};
+use sea_orm::{IntoActiveModel, QueryFilter};
 use sea_orm_rocket::Connection;
 use serde_json::json;
 
@@ -294,6 +297,63 @@ pub async fn delete_directory_handler(
                     .await
                     .unwrap();
                 Ok(Json(NetworkResponse::Ok("Directory deleted".to_string())))
+            } else {
+                Err(Json(NetworkResponse::NotFound(String::from(
+                    "Directory doesn't exists",
+                ))))
+            }
+        }
+        Err(e) => Err(e),
+    };
+    response
+}
+
+#[derive(FromForm)]
+pub struct RenameFolder {
+    new_name: String,
+}
+
+#[post("/renameDirectory/<id>", data = "<new_name>")]
+pub async fn rename_directory_handler(
+    conn: Connection<'_, Db>,
+    id: i32,
+    key: Result<JWT, NetworkResponse>,
+    new_name: Form<RenameFolder>,
+) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
+    let key = match key {
+        Ok(JWT { claims: c }) => Ok(c),
+        _ => Err(Json(NetworkResponse::Unauthorized(
+            "Requested unauthorized".to_string(),
+        ))),
+    };
+    let response = match key {
+        Ok(c) => {
+            let db = conn.into_inner();
+            if (check_dir_exists(&db, &id)).await {
+                let exists = files::Entity::find()
+                    .filter(files::Column::User.eq(c.subject_id))
+                    .filter(files::Column::Filename.eq(new_name.new_name.clone()))
+                    .one(db)
+                    .await
+                    .unwrap()
+                    .is_some();
+
+                if exists {
+                    return Err(Json(NetworkResponse::BadRequest(
+                        "Directory with the same name already exists".to_string(),
+                    )));
+                } else {
+                    //fetch the directory
+                    let actual_dir = Files::find_by_id(id).one(db).await.unwrap();
+                    //to active model
+                    let mut dir_active: files::ActiveModel =
+                        actual_dir.unwrap().into_active_model();
+                    //change name
+                    dir_active.filename = Set(new_name.new_name.to_string());
+                    //update the directory
+                    dir_active.update(db).await.unwrap();
+                    Ok(Json(NetworkResponse::Ok("Directory renamed".to_string())))
+                }
             } else {
                 Err(Json(NetworkResponse::NotFound(String::from(
                     "Directory doesn't exists",
