@@ -12,7 +12,8 @@ use rocket::serde::json::Json;
 use rocket_download_response::DownloadResponse;
 use sea_orm::ActiveValue::Set;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, JoinType, QuerySelect,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait,
+    QuerySelect,
 };
 use sea_orm::{IntoActiveModel, QueryFilter};
 use sea_orm_rocket::Connection;
@@ -114,6 +115,48 @@ pub async fn update_token_bot_handler(
             let bot = Bot::new(&form.bot_token);
             bot.send_message(ChatId(updated_user.user_telegram_id.clone()), "Hey! you successfully connected your bot to TeleSpace🚀.\nKeep in mind we can't assure all your data are safe now, for the moment at least").await;
             Ok(Json(NetworkResponse::Ok("Bot token updated".to_string())))
+        }
+        Err(e) => Err(e),
+    };
+    response
+}
+
+#[get("/stats")]
+pub async fn get_personal_stats_handler(
+    conn: Connection<'_, Db>,
+    key: Result<JWT, NetworkResponse>,
+) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
+    let key = match key {
+        Ok(JWT { claims: c }) => Ok(c),
+        _ => Err(Json(NetworkResponse::Unauthorized(
+            "Requested unauthorized".to_string(),
+        ))),
+    };
+
+    let response = match key {
+        Ok(c) => {
+            // Numbers of uploaded file
+            // Cumulative dimension of uploaded files
+            let db = conn.into_inner();
+            let file_count = files::Entity::find()
+                .filter(files::Column::User.eq(c.subject_id))
+                .filter(files::Column::Type.eq(0))
+                .count(db)
+                .await
+                .unwrap();
+            let file_sizes = files::Entity::find()
+                .filter(files::Column::User.eq(c.subject_id))
+                .filter(files::Column::Type.eq(0))
+                .all(db)
+                .await
+                .unwrap();
+            let cumulative_size = file_sizes.iter().map(|el| el.original_size).sum::<i64>();
+
+            let res_json = json!({
+                "file_count": file_count,
+                "cumulative_size": cumulative_size,
+            });
+            Ok(Json(NetworkResponse::Ok(res_json.to_string())))
         }
         Err(e) => Err(e),
     };

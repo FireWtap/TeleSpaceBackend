@@ -55,7 +55,7 @@ use crate::handlers::file_handlers::{
 
 use crate::handlers::task_handlers::get_all_tasks;
 use crate::handlers::user_handlers::{
-    check_bottoken_validity, get_me_handler, update_token_bot_handler,
+    check_bottoken_validity, get_me_handler, get_personal_stats_handler, update_token_bot_handler,
 };
 pub use entity::*;
 use service::task_queue;
@@ -395,7 +395,8 @@ async fn start() -> Result<(), rocket::Error> {
                 check_bottoken_validity,
                 update_token_bot_handler,
                 rename_file_handler,
-                rename_directory_handler
+                rename_directory_handler,
+                get_personal_stats_handler
             ],
         )
         .manage(GlobalState {
