@@ -46,7 +46,7 @@ pub async fn get_me_handler(
                 "id": user.id,
                 "username": user.email,
                 "botToken": user.bot_token,
-
+                "chatId": user.user_telegram_id,
             });
             Ok(Json(NetworkResponse::Ok(res_json.to_string())))
         }
@@ -113,8 +113,54 @@ pub async fn update_token_bot_handler(
             let updated_user = user_active.update(db).await.unwrap(); //Persist update
                                                                       // let's send a new message to the user
             let bot = Bot::new(&form.bot_token);
-            bot.send_message(ChatId(updated_user.user_telegram_id.clone()), "Hey! you successfully connected your bot to TeleSpace🚀.\nKeep in mind we can't assure all your data are safe now, for the moment at least").await;
+            let _ = bot.send_message(ChatId(updated_user.user_telegram_id.clone()), "Hey! you successfully connected your bot to TeleSpace🚀.\nKeep in mind we can't assure all your data are safe now, for the moment at least").await;
             Ok(Json(NetworkResponse::Ok("Bot token updated".to_string())))
+        }
+        Err(e) => Err(e),
+    };
+    response
+}
+
+#[derive(FromForm)]
+
+pub struct NewChatId {
+    chat_id: i64,
+}
+#[post("/updateChatId", data = "<form>")]
+pub async fn update_chat_id_handler(
+    conn: Connection<'_, Db>,
+    key: Result<JWT, NetworkResponse>,
+    form: Form<NewChatId>,
+) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
+    let key = match key {
+        Ok(JWT { claims: c }) => Ok(c),
+        _ => Err(Json(NetworkResponse::Unauthorized(
+            "Requested unauthorized".to_string(),
+        ))),
+    };
+    let response = match key {
+        Ok(c) => {
+            let db = conn.into_inner();
+            let user: users::Model = users::Entity::find_by_id(c.subject_id)
+                .one(db)
+                .await
+                .unwrap()
+                .unwrap(); //We're sure it exists
+            let user_clone = user.clone();
+
+            let mut user_active = user.into_active_model();
+            user_active.user_telegram_id = Set(form.chat_id); //Change token
+            let _ = user_active.update(db).await.unwrap(); //Persist update
+
+            //Inform the user by sending a message
+            let bot = Bot::new(user_clone.bot_token);
+            let _ = bot
+                .send_message(
+                    ChatId(form.chat_id),
+                    "Hey! you successfully connected your chat to TeleSpace🚀.\nKeep in mind we can't assure all your data are safe now, for the moment at least",
+                )
+                .await;
+            Ok(Json(NetworkResponse::Ok("Chat id updated".to_string())))
         }
         Err(e) => Err(e),
     };

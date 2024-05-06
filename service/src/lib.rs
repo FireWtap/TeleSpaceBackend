@@ -2,29 +2,21 @@ pub mod task_queue;
 pub mod worker;
 
 use chrono::{NaiveDateTime, Utc};
-use entity::chunks::*;
-use entity::files::*;
 use entity::prelude::{Chunks, Files};
-use entity::*;
 use migration::sea_orm::prelude::Uuid;
 use migration::sea_orm::ActiveValue::Set;
-use migration::sea_orm::{
-    ActiveModelTrait, DatabaseConnection, EntityTrait, InsertResult, ModelTrait,
-};
-use rocket::Data;
+use migration::sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, ModelTrait};
 use rust_file_splitting_utils::file_merger::merge;
 use sea_orm::IntoActiveModel;
 use std::fs;
-use std::fs::File;
-use std::io::ErrorKind;
-use std::path::{Path, PathBuf};
-use teloxide::net::{download_file, Download};
+use std::path::PathBuf;
+use teloxide::net::Download;
 use teloxide::payloads::GetFile;
 use teloxide::prelude::{Request, Requester};
 use teloxide::types::{ChatId, InputFile, Recipient};
-use teloxide::RequestError::{Network, RetryAfter};
-use teloxide::{Bot, DownloadError};
-use tokio::time::{self, sleep, Duration};
+use teloxide::Bot;
+use teloxide::RequestError::RetryAfter;
+use tokio::time::{sleep, Duration};
 pub async fn uploader(
     db: &DatabaseConnection,
     bot: &Bot,
@@ -48,7 +40,7 @@ pub async fn uploader(
         while !success {
             let result = bot
                 .send_document(
-                    Recipient::Id(ChatId(user_chat_id)), //hard coded. let's fix this
+                    Recipient::Id(ChatId(user_chat_id)),
                     InputFile::file(PathBuf::from(e)),
                 )
                 .send()
@@ -126,7 +118,7 @@ pub async fn downloader(db: &DatabaseConnection, bot: &Bot, db_file_id: u64, uui
     }
     let result_dir = format!("{}{}", &chunk_dir, file_info.filename);
     println!("{}", result_dir);
-    tokio::fs::File::create(format!("{}{}", "", file_info.filename)).await;
+    let _ = tokio::fs::File::create(format!("{}{}", "", file_info.filename)).await;
     merge(
         file_info.filename.clone(),
         "".to_string(),
@@ -136,7 +128,7 @@ pub async fn downloader(db: &DatabaseConnection, bot: &Bot, db_file_id: u64, uui
     for i in chunk_path_list.iter() {
         tokio::fs::remove_file(i).await;
     }
-    tokio::fs::remove_dir(chunk_dir).await;
+    let _ = tokio::fs::remove_dir(chunk_dir).await;
     //Update current file storage info and last download on db
     let mut active_file_info = file_info.clone().into_active_model();
     active_file_info.locally_stored = Set(Option::from(true));
