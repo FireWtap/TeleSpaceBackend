@@ -27,8 +27,8 @@ use tracing::debug;
 
 use migration::MigratorTrait;
 
-use teloxide::Bot;
-use tokio::sync::Mutex;
+
+
 
 mod handlers;
 mod jwtauth;
@@ -137,7 +137,7 @@ async fn upload_to_telegram_handler(
 
             println!("{:#?}", dir);
             let valid_dir = match dir {
-                Some(d) => true,                        // La directory esiste ed è valida
+                Some(_d) => true,                        // La directory esiste ed è valida
                 None if original_dir.is_none() => true, // dir era -1 o non specificata, usiamo la root directory
                 None => false,                          // dir era specificata ma non valida
             };
@@ -294,7 +294,7 @@ pub async fn get_status_handler(
                     status: related_task.status.clone(),
                     resource: None,
                 };
-                if (related_task.status.eq("COMPLETED")) {
+                if related_task.status.eq("COMPLETED") {
                     ok_response.resource = Option::from(related_file.id as u64);
                 }
 
@@ -339,7 +339,7 @@ async fn start() -> Result<(), rocket::Error> {
         sea_orm::Database::connect("sqlite://db.sqlite?mode=rwc")
             .await
             .unwrap();
-    let worker = tokio::spawn(async move {
+    let _worker = tokio::spawn(async move {
         worker(receiver, Arc::new(worker_connection)).await;
     });
 

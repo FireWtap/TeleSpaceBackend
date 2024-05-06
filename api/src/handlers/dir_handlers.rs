@@ -1,14 +1,14 @@
-use crate::jwtauth::jwt::{Claims, JWT};
+use crate::jwtauth::jwt::{JWT};
 use crate::pool::Db;
 use crate::responses::NetworkResponse;
 use entity::files;
-use entity::files::*;
+
 use entity::prelude::Files;
 use rocket::form::Form;
 use rocket::serde::json::Json;
 use sea_orm::ActiveValue::Set;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ModelTrait, QueryOrder,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryOrder,
 };
 use sea_orm::{IntoActiveModel, QueryFilter};
 use sea_orm_rocket::Connection;
@@ -25,7 +25,7 @@ pub async fn valid_parent(db: &DatabaseConnection, parent_id: &Option<i32>, uid:
         None => None,
     };
     let valid_dir = match parent_dir {
-        Some(d) => true,                      // La directory esiste ed è valida
+        Some(_d) => true,                      // La directory esiste ed è valida
         None if parent_dir.is_none() => true, // dir era -1 o non specificata, usiamo la root directory
         None => false,                        // dir era specificata ma non valida
     };
@@ -50,7 +50,7 @@ pub struct NewDirForm {
 #[post("/createDir", data = "<new_dir_input>")]
 pub async fn new_dir_handler(
     conn: Connection<'_, Db>,
-    mut new_dir_input: Form<NewDirForm>,
+    new_dir_input: Form<NewDirForm>,
     key: Result<JWT, NetworkResponse>,
 ) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
     let key = match key {
@@ -136,7 +136,7 @@ pub async fn list_directory(
     let response = match key {
         Ok(c) => {
             let original_parent = if id == -1 { None } else { Some(id) };
-            if (original_parent.is_none()) {
+            if original_parent.is_none() {
                 //list root dir
                 let list_root = files::Entity::find()
                     .filter(files::Column::User.eq(c.subject_id))
@@ -162,7 +162,7 @@ pub async fn list_directory(
                     .collect::<Vec<_>>();
 
                 Ok(Json(NetworkResponse::Ok(json!(directory_list).to_string())))
-            } else if (check_dir_exists(&db, &id).await) {
+            } else if check_dir_exists(&db, &id).await {
                 //list all in that directory
                 /*let dir_list = files::Entity::find_by_id(id)
                 .filter(files::Column::Type.eq(true))
@@ -217,7 +217,7 @@ pub async fn get_directory_name_handler(
         ))),
     };
     let response = match key {
-        Ok(c) => {
+        Ok(_c) => {
             let db = conn.into_inner();
             if (check_dir_exists(&db, &id)).await {
                 let name = Files::find_by_id(id)

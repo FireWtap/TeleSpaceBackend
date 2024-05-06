@@ -13,7 +13,6 @@ pub enum NetworkResponse {
 #[derive(Serialize)]
 pub enum ResponseBody {
     Message(String),
-    AuthToken(String),
 }
 
 #[derive(Serialize)]

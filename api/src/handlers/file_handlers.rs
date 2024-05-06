@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::jwtauth;
-use crate::jwtauth::jwt::{Claims, JWT};
+use crate::jwtauth::jwt::JWT;
 use crate::pool::Db;
 use crate::responses::NetworkResponse;
 use chrono::{NaiveDateTime, Utc};
@@ -122,7 +122,7 @@ pub async fn locally_stored_download_handler(
     let claims = jwtauth::jwt::decode_jwt(token);
     let key = match claims {
         Ok(c) => Ok(c),
-        Err(e) => Err(Json(NetworkResponse::Unauthorized(
+        Err(_e) => Err(Json(NetworkResponse::Unauthorized(
             "Not authorized".to_string(),
         ))),
     };
@@ -231,7 +231,7 @@ pub async fn file_info_handler(
 }
 
 // if file is locally avaialble, provide a clear cache to delete the file from the server, first with a simple method, then with a proper route
-pub async fn clear_cache(db: &DatabaseConnection, file_id: i32, user_id: i32) -> bool {
+pub async fn clear_cache(db: &DatabaseConnection, file_id: i32, _user_id: i32) -> bool {
     let file = files::Entity::find_by_id(file_id)
         .one(db)
         .await
@@ -241,7 +241,7 @@ pub async fn clear_cache(db: &DatabaseConnection, file_id: i32, user_id: i32) ->
     let filename = file.filename.clone();
     let locally_available = file.locally_stored.unwrap_or(false);
 
-    if (!locally_available) {
+    if !locally_available {
         return false;
     }
     let file_path = Path::new(&filename);

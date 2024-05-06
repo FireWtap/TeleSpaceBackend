@@ -1,4 +1,4 @@
-use sea_orm_migration::{prelude::*, seaql_migrations::Column};
+use sea_orm_migration::{prelude::*};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;

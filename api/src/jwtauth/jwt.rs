@@ -32,7 +32,7 @@ pub fn create_jwt(id: i32, user_email: String) -> Result<String, Error> {
     let secret = std::env::var("JWT_SECRET").unwrap();
 
     let expiration = Utc::now()
-        .checked_add_signed(chrono::Duration::seconds(24 * 60 * 60))
+        .checked_add_signed(chrono::Duration::try_seconds(24 * 60 * 60).unwrap())
         .expect("Invalid timestamp")
         .timestamp();
 

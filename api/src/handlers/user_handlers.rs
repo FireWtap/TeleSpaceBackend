@@ -1,26 +1,26 @@
-use std::path::Path;
 
-use crate::jwtauth;
-use crate::jwtauth::jwt::{Claims, JWT};
+
+
+use crate::jwtauth::jwt::{JWT};
 use crate::pool::Db;
 use crate::responses::NetworkResponse;
-use chrono::{NaiveDateTime, Utc};
-use entity::{files, task_list, users};
-use migration::{Alias, RcOrArc};
+
+use entity::{files, users};
+
 use rocket::form::Form;
 use rocket::serde::json::Json;
-use rocket_download_response::DownloadResponse;
+
 use sea_orm::ActiveValue::Set;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, InsertResult, JoinType,
-    PaginatorTrait, QuerySelect,
+    ActiveModelTrait, ColumnTrait, EntityTrait, InsertResult,
+    PaginatorTrait,
 };
 use sea_orm::{IntoActiveModel, QueryFilter};
 use sea_orm_rocket::Connection;
 use serde_json::json;
 use teloxide::requests::Requester;
 use teloxide::types::ChatId;
-use teloxide::{utils, Bot};
+use teloxide::{Bot};
 
 use crate::utils::encrypt_password;
 
@@ -73,7 +73,7 @@ pub async fn check_bottoken_validity(
         ))),
     };
     let response = match key {
-        Ok(c) => {
+        Ok(_c) => {
             let bot = Bot::new(&form.bot_token);
             let me = bot.get_me().await;
             match me {
