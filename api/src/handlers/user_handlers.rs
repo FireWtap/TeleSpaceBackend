@@ -12,15 +12,17 @@ use rocket::serde::json::Json;
 use rocket_download_response::DownloadResponse;
 use sea_orm::ActiveValue::Set;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait,
-    QuerySelect,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, InsertResult, JoinType,
+    PaginatorTrait, QuerySelect,
 };
 use sea_orm::{IntoActiveModel, QueryFilter};
 use sea_orm_rocket::Connection;
 use serde_json::json;
 use teloxide::requests::Requester;
 use teloxide::types::ChatId;
-use teloxide::Bot;
+use teloxide::{utils, Bot};
+
+use crate::utils::encrypt_password;
 
 #[get("/me")]
 pub async fn get_me_handler(
@@ -207,4 +209,58 @@ pub async fn get_personal_stats_handler(
         Err(e) => Err(e),
     };
     response
+}
+
+//Register! T_T
+
+#[derive(FromForm)]
+pub struct RegisterForm {
+    email: String,
+    password: String,
+    bot_token: String,
+    chat_id: i64,
+}
+#[post("/register", data = "<form>")]
+pub async fn register_user_handler(
+    conn: Connection<'_, Db>,
+    form: Form<RegisterForm>,
+) -> Result<Json<NetworkResponse>, Json<NetworkResponse>> {
+    let db = conn.into_inner();
+
+    if !form.email.contains('@') {
+        return Ok(Json(NetworkResponse::BadRequest(
+            "Invalid email address".to_string(),
+        )));
+    }
+
+    if form.password.len() < 8 {
+        return Ok(Json(NetworkResponse::BadRequest(
+            "Password must be at least 8 characters long".to_string(),
+        )));
+    }
+
+    //Check for existing user
+    let existing_user = users::Entity::find()
+        .filter(users::Column::Email.eq(&form.email))
+        .one(db)
+        .await
+        .unwrap();
+    if existing_user.is_some() {
+        return Ok(Json(NetworkResponse::Conflict(
+            "User already exists".to_string(),
+        )));
+    }
+
+    let user = users::ActiveModel {
+        email: Set(form.email.clone()),
+        password_hash: Set(encrypt_password(form.password.clone())),
+        bot_token: Set(form.bot_token.clone()),
+        user_telegram_id: Set(form.chat_id),
+        ..Default::default()
+    };
+    let res: InsertResult<users::ActiveModel> = users::Entity::insert(user).exec(db).await.unwrap();
+
+    Ok(Json(NetworkResponse::Ok(
+        "User Id: ".to_string() + &res.last_insert_id.to_string(),
+    )))
 }

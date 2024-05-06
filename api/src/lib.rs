@@ -55,8 +55,8 @@ use crate::handlers::file_handlers::{
 
 use crate::handlers::task_handlers::get_all_tasks;
 use crate::handlers::user_handlers::{
-    check_bottoken_validity, get_me_handler, get_personal_stats_handler, update_chat_id_handler,
-    update_token_bot_handler,
+    check_bottoken_validity, get_me_handler, get_personal_stats_handler, register_user_handler,
+    update_chat_id_handler, update_token_bot_handler,
 };
 pub use entity::*;
 use service::task_queue;
@@ -322,7 +322,6 @@ async fn run_migrations(rocket: Rocket<Build>) -> fairing::Result {
 }
 
 struct GlobalState {
-    bot: Mutex<Bot>,
     queue: TaskQueue,
 }
 
@@ -335,7 +334,6 @@ async fn start() -> Result<(), rocket::Error> {
     debug!("Init database...");
     let db: Initializer<Db> = Db::init();
     debug!("Init bot connection...");
-    let bot = Bot::from_env();
 
     let worker_connection: DatabaseConnection =
         sea_orm::Database::connect("sqlite://db.sqlite?mode=rwc")
@@ -398,13 +396,11 @@ async fn start() -> Result<(), rocket::Error> {
                 rename_file_handler,
                 rename_directory_handler,
                 get_personal_stats_handler,
-                update_chat_id_handler
+                update_chat_id_handler,
+                register_user_handler
             ],
         )
-        .manage(GlobalState {
-            bot: Mutex::from(bot.clone()),
-            queue: task_queue,
-        })
+        .manage(GlobalState { queue: task_queue })
         .launch()
         .await
         .map(|_| ())
