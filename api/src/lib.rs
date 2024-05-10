@@ -27,9 +27,6 @@ use tracing::debug;
 
 use migration::MigratorTrait;
 
-
-
-
 mod handlers;
 mod jwtauth;
 mod pool;
@@ -78,6 +75,7 @@ pub struct User {
 struct LoginReq {
     email: String,
     password_hash: String,
+    notification_token: String,
 }
 #[post("/login", data = "<user>")]
 async fn login_user_handler(
@@ -87,7 +85,9 @@ async fn login_user_handler(
     let form = user.into_inner();
     let email: String = form.email;
     let password: String = utils::encrypt_password(form.password_hash);
-    match jwtauth::jwt::login_user(conn.into_inner(), &email, &password).await {
+    let notification_token: String = form.notification_token;
+    match jwtauth::jwt::login_user(conn.into_inner(), &email, &password, &notification_token).await
+    {
         Ok(token) => Ok(Json(NetworkResponse::Ok(token))),
         Err(network_response) => Err(Json(network_response)),
     }
@@ -137,7 +137,7 @@ async fn upload_to_telegram_handler(
 
             println!("{:#?}", dir);
             let valid_dir = match dir {
-                Some(_d) => true,                        // La directory esiste ed è valida
+                Some(_d) => true,                       // La directory esiste ed è valida
                 None if original_dir.is_none() => true, // dir era -1 o non specificata, usiamo la root directory
                 None => false,                          // dir era specificata ma non valida
             };

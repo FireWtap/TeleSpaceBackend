@@ -2,6 +2,7 @@ use crate::responses;
 use crate::responses::{NetworkResponse, Response, ResponseBody};
 use chrono::Utc;
 use dotenvy::dotenv;
+use entity::notification_tokens;
 use entity::prelude::Users;
 use entity::users;
 use jsonwebtoken::errors::{Error, ErrorKind};
@@ -10,6 +11,7 @@ use rocket::http::Status;
 use rocket::request::Outcome;
 use rocket::request::{self, FromRequest, Request};
 use rocket::serde::{Deserialize, Serialize};
+use sea_orm::ActiveValue::Set;
 use sea_orm::{ColumnTrait, QueryFilter};
 use sea_orm::{DatabaseConnection, EntityTrait};
 
@@ -139,6 +141,7 @@ pub async fn login_user(
     db: &DatabaseConnection,
     email: &String,
     password: &String,
+    notification_token: &String,
 ) -> Result<String, NetworkResponse> {
     let user = Users::find()
         .filter(users::Column::Email.eq(email))
@@ -147,6 +150,18 @@ pub async fn login_user(
         .await;
     match user {
         Ok(Some(user)) => {
+            // Notification Token Handler
+            if notification_token != "" {
+                let not_token = notification_tokens::ActiveModel {
+                    user: Set(user.id.clone()),
+                    token_notification: Set(notification_token.to_string()),
+                    ..Default::default()
+                };
+                let _ = notification_tokens::Entity::insert(not_token)
+                    .exec(db)
+                    .await;
+            }
+
             let token = create_jwt(user.id, user.email).map_err(|err| {
                 let response = responses::Response {
                     body: ResponseBody::Message(format!("JWT creation error: {}", err)),

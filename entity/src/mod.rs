@@ -4,5 +4,6 @@ pub mod prelude;
 
 pub mod chunks;
 pub mod files;
+pub mod notification_tokens;
 pub mod task_list;
 pub mod users;
