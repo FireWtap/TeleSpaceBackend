@@ -2,6 +2,7 @@ use crate::task_queue::TaskType;
 use crate::{downloader, uploader};
 use chrono::{NaiveDateTime, Utc};
 use entity::{notification_tokens, task_list};
+use fcm_v1::{message, Client};
 use sea_orm::entity::prelude::ColumnTrait;
 use sea_orm::ActiveValue::Set;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, QueryFilter};
@@ -11,7 +12,11 @@ use std::sync::Arc;
 use teloxide::Bot;
 use tokio::sync::mpsc::UnboundedReceiver;
 
-pub async fn worker(mut rx: UnboundedReceiver<TaskType>, db: Arc<DatabaseConnection>) {
+pub async fn worker(
+    mut rx: UnboundedReceiver<TaskType>,
+    db: Arc<DatabaseConnection>,
+    message_client: Client,
+) {
     while let Some(task) = rx.recv().await {
         match task {
             TaskType::Upload {
@@ -53,6 +58,24 @@ pub async fn worker(mut rx: UnboundedReceiver<TaskType>, db: Arc<DatabaseConnect
                 ));
 
                 new_status.update(db.as_ref()).await.unwrap();
+
+                //Notification handler
+                let mut tokens = notification_tokens::Entity::find()
+                    .filter(notification_tokens::Column::User.eq(user_id as i32))
+                    .all(db.as_ref())
+                    .await
+                    .unwrap();
+                let mut notification = message::Notification::default();
+                notification.title = Some("An upload has been completed!".to_string());
+                notification.body = Some("Your file is now safely stored on Telegram. You can download it back whenever you want!:)".to_string());
+                for token in tokens.iter_mut() {
+                    let mut message = message::Message::default();
+                    message.notification = Some(notification.clone());
+                    message.token = Some(token.token_notification.clone());
+                    //Send the notification
+                    let response = message_client.send(&message).await.unwrap();
+                    println!("Sending message to token: {:?}", token.token_notification);
+                }
             }
             TaskType::Download {
                 id,
@@ -81,26 +104,22 @@ pub async fn worker(mut rx: UnboundedReceiver<TaskType>, db: Arc<DatabaseConnect
 
                 new_status.update(db.as_ref()).await.unwrap();
                 //Hey the file has been downloaded! We can send a notification to the user now!
-                let client = fcm::Client::new();
+
                 let mut tokens = notification_tokens::Entity::find()
                     .filter(notification_tokens::Column::User.eq(user_id as i32))
                     .all(db.as_ref())
                     .await
                     .unwrap();
-
+                let mut notification = message::Notification::default();
+                notification.title = Some("A download has been completed!".to_string());
+                notification.body = Some("Your file has been downloaded to our server, check out the dashboard for more info!".to_string());
                 for token in tokens.iter_mut() {
-                    let mut message = fcm::NotificationBuilder::new();
-                    message.title("Download Complete! Check your cloud");
-                    message.body("Your file has been downloaded!");
-                    let notification = message.finalize();
-                    let api_key =
-                        env::var("FIREBASE_SERVER_KEY").expect("FIREBASE_SERVER_KEY not found");
-
-                    let mut message_builder =
-                        fcm::MessageBuilder::new(api_key.as_str(), &token.token_notification);
-                    println!("{:?}", token.token_notification);
-                    message_builder.notification(notification);
-                    let response = client.send(message_builder.finalize()).await;
+                    let mut message = message::Message::default();
+                    message.notification = Some(notification.clone());
+                    message.token = Some(token.token_notification.clone());
+                    //Send the notification
+                    let response = message_client.send(&message).await.unwrap();
+                    println!("Sending message to token: {:?}", token.token_notification);
                 }
                 //let mut builder = fcm::MessageBuilder::new("qO1YFT2VzpkelpQHVbKzMOezJTgjM3ZA3hpONQWGLFc", user_token);
             }

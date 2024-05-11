@@ -3,6 +3,7 @@ extern crate rocket;
 
 use dotenvy::dotenv;
 
+use fcm_v1::{auth, Client};
 use rocket::fairing::{self, AdHoc};
 use rocket::form::Form;
 use rocket::fs::TempFile;
@@ -19,6 +20,8 @@ use sea_orm::{
 };
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
+use std::{env, result};
 
 use sea_orm::prelude::Uuid;
 use sea_orm_rocket::{Connection, Database, Initializer};
@@ -333,14 +336,25 @@ async fn start() -> Result<(), rocket::Error> {
     let (task_queue, receiver) = TaskQueue::new().await;
     debug!("Init database...");
     let db: Initializer<Db> = Db::init();
-    debug!("Init bot connection...");
+
+    //Initializing OAUTH and Connection to firebase cloud messaging
+    let creds_path = env::var("GOOGLE_APPLICATION_CREDENTIALS").unwrap();
+    let project_id = env::var("GOOGLE_PROJECT_ID").unwrap();
+
+    let authenticator = auth::Authenticator::service_account_from_file(creds_path)
+        .await
+        .map_err(|e| e)
+        .unwrap();
+
+    let client = Client::new(authenticator, project_id, false, Duration::from_secs(10)); //false because we don't want test messages to be sent
+                                                                                         //I'll put client in the global state so that it can be accessed by the handlers
 
     let worker_connection: DatabaseConnection =
         sea_orm::Database::connect("sqlite://db.sqlite?mode=rwc")
             .await
             .unwrap();
     let _worker = tokio::spawn(async move {
-        worker(receiver, Arc::new(worker_connection)).await;
+        worker(receiver, Arc::new(worker_connection), client).await;
     });
 
     debug!("Setting up CORS...");

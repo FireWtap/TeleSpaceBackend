@@ -1,10 +1,14 @@
+use dotenvy::dotenv;
 use entity::prelude::TaskList;
 
+use fcm_v1::{auth, Client};
 use sea_orm::prelude::Uuid;
 use sea_orm::ActiveValue::Set;
 use sea_orm::{Database, DatabaseConnection, EntityTrait};
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -34,6 +38,7 @@ impl TaskQueue {
         let db_conn = Database::connect("sqlite://db.sqlite?mode=rwc")
             .await
             .unwrap();
+
         (
             TaskQueue {
                 sender,

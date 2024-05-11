@@ -154,7 +154,7 @@ pub async fn login_user(
             if notification_token != "" {
                 let not_token = notification_tokens::ActiveModel {
                     user: Set(user.id.clone()),
-                    token_notification: Set(notification_token.to_string()),
+                    token_notification: Set(notification_token.clone()),
                     ..Default::default()
                 };
                 let _ = notification_tokens::Entity::insert(not_token)

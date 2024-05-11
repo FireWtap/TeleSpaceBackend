@@ -34,16 +34,6 @@ impl MigrationTrait for Migration {
                             .string()
                             .not_null(),
                     )
-                    .foreign_key(
-                        ForeignKeyCreateStatement::new()
-                            .name("FK_User_NotificationTokens")
-                            .from_tbl(NotificationTokens::Table)
-                            .from_col(NotificationTokens::Id)
-                            .to_tbl(Users::Table)
-                            .to_col(Users::Id)
-                            .on_delete(ForeignKeyAction::Cascade)
-                            .on_update(ForeignKeyAction::Cascade),
-                    )
                     .to_owned(),
             )
             .await
